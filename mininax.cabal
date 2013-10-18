@@ -1,0 +1,33 @@
+name: mininax
+version: 0.0.1
+cabal-version: >=1.2
+build-type: Simple
+license: AllRightsReserved
+license-file: /home/kyagrd/cscs/mininax/LICENSE.md
+copyright: BSD
+maintainer: Ki Yung Ahn
+homepage: https://github.com/kyagrd/mininax
+bug-reports: https://github.com/kyagrd/mininax/issues
+synopsis: Minimal implementation of Nax
+description: Minimal implementation of the Nax programming language without term indices and other features.
+category: Language
+author: Ki Yung Ahn
+data-dir: ""
+ 
+executable mininax
+    build-depends: QuickCheck -any, RepLib -any, base -any,
+                   containers -any, mtl -any, unbound -any
+    main-is: Main.hs
+    buildable: True
+    hs-source-dirs: src
+    other-modules: Syntax Infer
+    ghc-options: -Wall
+ 
+test-suite test-mininax
+    build-depends: QuickCheck -any, RepLib -any, base -any,
+                   containers -any, mtl -any, unbound -any
+    type: exitcode-stdio-1.0
+    main-is: Main.hs
+    buildable: True
+    cpp-options: -DMAIN_FUNCTION=testMain
+    hs-source-dirs: src
