@@ -80,6 +80,7 @@ closeTy ctx ty = bind (fv ty \\ fv ctx) ty
 
 type TI = FreshMT (ErrorT UnifyError (State (UnificationState TyName Ty)))
 
+-- TODO catch errors and append more context info
 ti :: Ctx -> Tm -> TI Ty
 ti ctx (Var x)  = case lookup x ctx of
                     Nothing -> throwError(strMsg $ name2String x++" undefined")
@@ -103,15 +104,35 @@ ti ctx (Let b)  = do ((x, Embed t1), t2) <- unbind b
                      ti ((x, tysch) : ctx) t2
 ti ctx (Alt _ []) = throwError(strMsg "empty Alts")
 ti ctx (Alt Nothing as) =
-                  do tys <- mapM tiAlt as
+                  do tys <- mapM (tiAlt ctx) as
                      lift $ unifyMany (zip tys (tail tys))
                      return (head tys)
-ti ctx (Alt (Just im) as) = error "ti ctx (Alt as)"
---                  do error "ti ctx (Alt as)"
---                     error "ti ctx (Alt as)"
+ti ctx (Alt (Just im) as) =
+                  do tys <- mapM (tiAlt ctx) as
+                     let (tcon : args) = tApp2list (head tys) 
+                     (is, rngty) <- unbind im
+                     when (length is > length args)
+                        $ throwError(strMsg $ "too many indices in "++show im)
+                     let args' = replaceSuffix args (map TVar is)
+                     let domty = foldl1 TApp (tcon : args')
+                     let tysch = bind is (TArr domty rngty)
+                     tys' <- mapM freshInst (replicate (length as) tysch)
+                     lift $ unifyMany (zip tys' tys)
+                     freshInst tysch
 
 
-tiAlt = undefined
+replaceSuffix xs ys = reverse (drop (length ys) (reverse xs)) ++ ys
+
+tApp2list (TApp ty1 ty2) = tApp2list ty1 ++ [ty2]
+tApp2list ty             = [ty]
+
+-- not considering existentials or generic existentials yet
+tiAlt ctx (x,b) =
+  do (ns,t) <- unbind b -- (Con x) applied to (map Var ns) -> t
+     domty <- ti ctx (Con x)
+     let (tcon : args) = tApp2list domty
+     rngty <- ti (zip ns (map (bind []) args) ++ ctx) t
+     return (TArr domty rngty)
 
 _x = "x"
 x = Var _x

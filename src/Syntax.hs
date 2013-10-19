@@ -59,6 +59,7 @@ data Tm = Var TmName
         | Alt (Maybe IxMap) [(TmName,(Bind [TmName] Tm))]
    deriving Show
 
+-- assuming only variable form of indicies in IxMap
 type IxMap = Bind [TyName] Ty
 
 $(derive [''Ki, ''Ty, ''Tm])
