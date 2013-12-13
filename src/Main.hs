@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, TemplateHaskell #-}
+{-# LANGUAGE CPP, TemplateHaskell, QuasiQuotes #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Main
@@ -23,6 +23,19 @@ import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
 import Syntax
 import Infer
+import Parser
+
+{-
+example :: Reg
+example = RStar (RAlt (RChar 'a') (RChar 'b'))
+
+r1, r2 :: Reg
+r1 = [reg| 'a' * 'b' * 'c' * |]
+r2 = RSeq (RSeq (RStar (RChar 'a')) (RStar (RChar 'b'))) (RStar (RChar 'c'))
+-}
+
+k :: Kind
+k = [kind| * |]
 
 -- Simple function to create a hello message.
 hello s = "Hello " ++ s
@@ -32,8 +45,7 @@ hello s = "Hello " ++ s
 prop_hello s = stripPrefix "Hello " (hello s) == Just s
 
 -- Hello World
-exeMain = do
-    putStrLn (hello "World")
+exeMain = do print ty
 
 -- Entry point for unit tests.
 testMain = do

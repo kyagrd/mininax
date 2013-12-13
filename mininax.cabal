@@ -15,17 +15,17 @@ author: Ki Yung Ahn
 data-dir: ""
  
 executable mininax
-    build-depends: QuickCheck -any, RepLib -any, base -any,
-                   containers -any, mtl -any, unbound -any
+    build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
+                   base -any, containers -any, mtl -any, unbound -any
     main-is: Main.hs
     buildable: True
     hs-source-dirs: src
-    other-modules: Syntax Infer
+    other-modules: Syntax Infer Parser
     ghc-options: -Wall
  
 test-suite test-mininax
-    build-depends: QuickCheck -any, RepLib -any, base -any,
-                   containers -any, mtl -any, unbound -any
+    build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
+                   base -any, containers -any, mtl -any, unbound -any
     type: exitcode-stdio-1.0
     main-is: Main.hs
     buildable: True
