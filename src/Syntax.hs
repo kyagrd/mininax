@@ -1,3 +1,4 @@
+-- vim: sw=2: ts=2: set expandtab:
 {-# LANGUAGE TemplateHaskell,
              ScopedTypeVariables,
              FlexibleInstances,
@@ -49,10 +50,12 @@ data Ty = TVar TyName
         | TCon TyName
         | TArr Ty Ty
         | TApp Ty Ty
+        | TFix Ty
    deriving Show
 
 data Tm = Var TmName
         | Con TmName
+        | In Integer Tm
         | Lam (Bind TmName Tm)
         | App Tm Tm
         | Let (Bind (TmName, Embed Tm) Tm)
@@ -105,10 +108,12 @@ printTy (TVar x) = show x
 printTy (TCon x) = show x
 printTy (TArr t1 t2) = "("++printTy t1++" -> "++printTy t2++")"
 printTy (TApp t1 t2) = "("++printTy t1++" "++printTy t2++")"
+printTy (TFix t) = "(Mu "++printTy t++")"
 
 printTm :: Tm -> String
 printTm (Var x) = show x
 printTm (Con x) = show x
+printTm (In n t) = "(In["++show n++"] "++printTm t++")"
 printTm (Lam b) = "(\\"++show nm++"."++printTm t++")"
   where (nm,t) = unsafeUnbind b
 printTm (App t1 t2) = "("++printTm t1 ++" "++ printTm t2++")"

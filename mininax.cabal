@@ -20,7 +20,7 @@ executable mininax
     main-is: Main.hs
     buildable: True
     hs-source-dirs: src
-    other-modules: Syntax Infer Parser
+    other-modules: InferDec Syntax Infer Parser
     ghc-options: -Wall
  
 test-suite test-mininax
