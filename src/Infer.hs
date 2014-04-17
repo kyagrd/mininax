@@ -22,6 +22,7 @@ import Parser ()
 -- import Generics.RepLib
 import Generics.RepLib.Unify
 import Unbound.LocallyNameless hiding (subst, Con)
+import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
 
@@ -140,6 +141,22 @@ type TI = FreshMT (ErrorT UnifyError (State (UnificationState TyName Ty)))
 type TySch = Bind [TyName] Ty
 
 
+kargs = unfoldr (\k -> case k of { KArr k1 k2 -> Just(k1,k2) ; _ -> Nothing })
+
+arity nm kctx = length (kargs k)
+   where Just k = lookup nm kctx
+
+-- We need to examine how many parameters a fixpoint can have
+-- To do so we must find index to the first argument r.
+-- First need to know the kind of r, and the arity of the kind ???
+-- But here we just have a hacky implementation, which I am
+-- not 100% sure of it correctness. Seem to work for now :(
+--
+-- arityParam nm kctx ctx
+--    length (kargs k)
+--    where Just k = lookup nm kctx
+
+
 ureturn ty = do { u <- getSubst; return (uapply u ty) }
 
 -- TODO catch errors and append more context info
@@ -152,7 +169,7 @@ ti kctx ctx (Con x) =
   case lookup x ctx of
     Nothing -> throwError(strMsg $ name2String x++" undefined")
     Just tysch -> ureturn =<< freshInst tysch
-ti kctx ctx (In n t)
+ti kctx ctx (In n t) -- this is a hacky implementation without checking kinds
   | n < 0     = error "In[n] should have non-negative n"
   | otherwise = do ty <- ti kctx ctx t
                    let m = fromInteger n
@@ -160,6 +177,19 @@ ti kctx ctx (In n t)
                    ty1 <- TVar <$> fresh "t"
                    lift $ unify (foldl TApp ty1 (TFix ty1 : is)) ty
                    ureturn $ foldl TApp (TFix ty1) is
+ti kctx ctx (MIt b) =
+  do (f,tm@(Alt mphi as)) <- unbind b
+     r <- fresh "r"
+     t <- fresh "t"
+     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (TVar <$> fresh "b")
+                                 Just phi -> unbind phi
+     let tyf = foldl1 TApp (TCon r : map TVar is) `TArr` tyret
+     let tytm = foldl1 TApp (TVar t : TCon r : map TVar is) `TArr` tyret
+     let kctx' = (r, undefined {- TODO this is hack -}) : kctx
+     let ctx' = (f,bind is tyf) : ctx
+     tytm' <- ti kctx' ctx' tm
+     lift $ unify tytm tytm'
+     ureturn $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
 ti kctx ctx (Lam b) =
   do (x, t) <- unbind b
      ty1 <- TVar <$> fresh "a"
@@ -183,7 +213,7 @@ ti kctx ctx (Alt Nothing as) =
      ureturn (head tys)
 ti kctx ctx (Alt (Just im) as) =
   do tys <- mapM (tiAlt kctx ctx) as
-     let (tcon : args) = tApp2list (head tys) 
+     let (tcon : args) = tApp2list $ case (head tys) of TArr ty _ -> ty
      (is, rngty) <- unbind im
      when (length is > length args)
         $ throwError(strMsg $ "too many indices in "++show im)
@@ -199,6 +229,11 @@ replaceSuffix xs ys = reverse (drop (length ys) (reverse xs)) ++ ys
 
 tApp2list (TApp ty1 ty2) = tApp2list ty1 ++ [ty2]
 tApp2list ty             = [ty]
+
+app2list (App t1 t2) = app2list t1 ++ [t2]
+app2list t           = [t]
+
+
 
 -- not considering existentials or generic existentials yet
 tiAlt kctx ctx (x,b) =
@@ -235,4 +270,48 @@ ty = runTI $ ti [] [] (lam _x x)
 
 unbindTySch tsch = snd (unsafeUnbind tsch)
 
--- start writing tyinfer as if there were only * kinded TyVar
+-- unbindTySch' tsch = snd $ runFreshM (unbind tsch)
+
+-- evaluation
+
+sreturn ctx t = return $ foldr (.) id (map (uncurry LN.subst) ctx) t
+
+ev ctx (Var x) =
+  case lookup x ctx of
+    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Just v  -> return v
+ev ctx v@(Con x) = return v
+ev ctx (In n t) = In n <$> ev ctx t
+ev ctx v@(MIt b) = return v
+ev ctx v@(Lam b) = return v
+ev ctx (App t1 t2) =
+  do v1 <- ev ctx t1
+     v2 <- ev ctx t2
+     case v1 of
+       Var x -> error $ name2str x ++ " should never happen" -- return $ App v1 v2 -- should never happen
+       Con _ -> return $ App v1 v2
+       In _ _ -> return $ App v1 v2
+       App _ _ -> return $ App v1 v2
+       Lam b -> do (x, t) <- unbind b
+                   let ctx' = (x,v2) : ctx
+                   sreturn [(x,v2)] =<< ev ctx' t
+       MIt b -> do (f,t) <- unbind b
+                   let ctx' = (f,v1) : ctx
+                   let In _ v = v2
+                   sreturn [(f,v1)] =<< ev ctx' (App t v)
+       Alt m as ->
+         do let (Con c:vs) = app2list v2
+            case lookup c as of
+              Nothing -> throwError(strMsg $ name2String c++" undefined")
+              Just b  ->
+                do (xs,t) <- unbind b
+                   let ctx' = zip xs vs ++ ctx
+                   sreturn (zip xs vs) =<< ev ctx' t
+ev ctx (Let b) = do ((x, Embed t1), t2) <- unbind b
+                    v1 <- ev ctx t1
+                    let ctx' = (x,v1) : ctx
+                    sreturn [(x,v1)] =<< ev ctx' t2
+ev ctx v@(Alt _ _) = return v
+
+
+

@@ -26,6 +26,7 @@ module Syntax (
    TmName, Tm(..), printTm
  , TyName, Ty(..), printTy
  , KiName, Ki(..), printKi
+ , name2str
 ) where
 
 -- import Control.Monad
@@ -50,12 +51,13 @@ data Ty = TVar TyName
         | TCon TyName
         | TArr Ty Ty
         | TApp Ty Ty
-        | TFix Ty
+        | TFix Ty -- Ty must be TCon or application of TCon to other arguments
    deriving Show
 
 data Tm = Var TmName
         | Con TmName
         | In Integer Tm
+        | MIt (Bind TmName Tm) -- Tm must be Alt
         | Lam (Bind TmName Tm)
         | App Tm Tm
         | Let (Bind (TmName, Embed Tm) Tm)
@@ -114,6 +116,8 @@ printTm :: Tm -> String
 printTm (Var x) = show x
 printTm (Con x) = show x
 printTm (In n t) = "(In["++show n++"] "++printTm t++")"
+printTm (MIt b) = "(MIt "++show nm ++" "++ printTm t++")"
+  where (nm,t) = unsafeUnbind b
 printTm (Lam b) = "(\\"++show nm++"."++printTm t++")"
   where (nm,t) = unsafeUnbind b
 printTm (App t1 t2) = "("++printTm t1 ++" "++ printTm t2++")"
@@ -128,6 +132,9 @@ printAlt (nm,b) = unwords (map name2String (nm:nms)) ++ " -> " ++ printTm t
 
 printIxMap b = "["++ unwords (map name2String ns) ++" . "++ printTy ty ++"]"
   where (ns,ty) = unsafeUnbind b
+
+name2str nm = name2String nm ++
+              case (name2Integer nm) of { 0 -> ""; n -> show n }
 
 {-
 -----------------------------------------------------------------

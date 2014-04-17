@@ -63,4 +63,8 @@ kiDAlt ctx (DAlt _ ts) =
   do ks <- mapM (ki ctx) (map type2Ty ts)
      lift $ unifyMany (zip (repeat Star) ks)
 
+evDecs ctx (Data _ _ _ : ds) = evDecs ctx ds
+evDecs ctx (Def (LIdent x) t : ds) = do v <- ev ctx (term2Tm t)
+                                        evDecs ((string2Name x, v) : ctx) ds
+evDecs ctx [] = return ctx
 

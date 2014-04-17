@@ -1,5 +1,5 @@
 -- vim: sw=2: ts=2: set expandtab:
-{-# LANGUAGE CPP, TemplateHaskell, QuasiQuotes #-}
+{-# LANGUAGE CPP, TemplateHaskell, QuasiQuotes, NoMonomorphismRestriction #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Main
@@ -20,24 +20,18 @@ module Main (
 
 import Control.Monad
 import Control.Monad.Trans
+import Control.Monad.Error
+import Control.Monad.Identity
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
 import Language.LBNF.Runtime (printTree)
 import Generics.RepLib.Unify
+import Unbound.LocallyNameless (runFreshMT)
 import Syntax
 import Infer
 import InferDec
 import Parser
-
-{-
-example :: Reg
-example = RStar (RAlt (RChar 'a') (RChar 'b'))
-
-r1, r2 :: Reg
-r1 = [reg| 'a' * 'b' * 'c' * |]
-r2 = RSeq (RSeq (RStar (RChar 'a')) (RStar (RChar 'b'))) (RStar (RChar 'c'))
--}
 
 k :: Kind
 k = [kind| * |]
@@ -54,9 +48,10 @@ program =
     data N r = Z | S r ;
     data L a r = N | C a r ;
     data P r a = PN | PC a (r (Pair a a)) ;
-    data MMM = MMM (Mu N);
-    x = \x -> x;
-    y = x;
+    data MM = MM (Mu N);
+    data MMM a = MMM (Mu P a);
+    id = \x -> x ;
+    x = id;
     z = {True -> True; False -> False};
     z2 = {Nothing -> False; Just x -> True};
     b = True ;
@@ -69,10 +64,28 @@ program =
     cons = \x -> \xs -> In 0 (C x xs) ;
     pnil = In 1 PN ;
     pcons = \x -> \xs -> In 1 (PC x xs) ;
-    z4 = succ zero ;
+    -- ppnil = In 0 PN ;
+    one = succ zero ;
+    two = succ one ;
+    three = succ two ;
     z5 = cons nil nil ;
     z6 = cons True nil ;
-    z7 = pcons True (pcons (Pair False True) pnil)
+    z7 = pcons True (pcons (Pair False True) pnil) ;
+    z8 = pcons one (pcons (Pair two three) pnil) ;
+    flip = \f -> \x -> \y -> f y x;
+    plus = mit add { Z   -> \m -> m
+                   ; S n -> \m -> succ (add n m) } ;
+    length = mit len { N -> zero; C x xs -> succ (len xs) } ;
+    psum = mit sum {{ a . (a -> Mu N) -> Mu N }}
+            { PN      -> \f -> zero
+            ; PC x xs -> \f -> plus (f x)
+                                    (sum xs {Pair a b -> plus (f a) (f b)} )
+            } ;
+    n4 = plus (plus one one) (plus one one) ;
+    n5 = length z6 ;
+    n6 = length z5 ;
+    n7 = psum z8 id ;
+    n8 = flip psum
    |]
 
 {-
@@ -99,6 +112,10 @@ ctx = case (runTI $ tiDecs kctx (case program of Prog ds -> [d | d@(Data _ _ _)<
          of Right x -> x
             Left x -> error x
 
+evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds)) 
+          of Right x -> x
+             Left x -> error x
+
 -- Simple function to create a hello message.
 hello s = "Hello " ++ s
 
@@ -116,6 +133,9 @@ exeMain = do
   mapM_ putStrLn
       $ reverse [show x++" : "++ printTree(ty2Type $ (foldr (.) id (map (uncurry subst) u)) $ unbindTySch t) | (x,t) <- ctx]
   putStrLn ""
+  mapM_ putStrLn
+      $ reverse [show x++" = "++ printTree(tm2Term t) ++ " ;" | (x,t) <- evctx]
+  putStrLn ""
   where
     Prog ds = program
     dataDecs = [d | d@(Data _ _ _)<- ds]
@@ -126,6 +146,10 @@ exeMain = do
                                ; u<-getSubst; return (ctx,u)}) of
                 Left errMsg -> error errMsg
                 Right ctx -> ctx
+    evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds)) of
+              Right x -> x
+              Left x -> error x
+
 
 
 
