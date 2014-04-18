@@ -108,7 +108,7 @@ kctx = case (runTI $ kiDataDecs (case program of Prog ds -> [d | d@(Data _ _ _)<
          of Right x -> x
             Left x -> error x
 
-ctx = case (runTI $ tiDecs kctx (case program of Prog ds -> [d | d@(Data _ _ _)<- ds]) [])
+ctx = case (runTI $ tiDecs kctx (case program of Prog ds -> ds) [])
          of Right x -> x
             Left x -> error x
 
@@ -128,10 +128,11 @@ prop_hello s = stripPrefix "Hello " (hello s) == Just s
 -- Hello World
 exeMain = do
   mapM_ putStrLn
-      $ reverse [show x++" : "++ printTree(ki2Kind k) | (x,k) <- kctx]
+      $ reverse [show x++" : "++ printTree k | (x,k) <- kctx]
   putStrLn ""
   mapM_ putStrLn
-      $ reverse [show x++" : "++ printTree(ty2Type $ (foldr (.) id (map (uncurry subst) u)) $ unbindTySch t) | (x,t) <- ctx]
+      $ reverse [show x++" : "++ printTree((foldr (.) id (map (uncurry subst) u)) $ unbindTySch t) | (x,t) <- ctx]
+--      $ reverse [show x++" : "++ printTree(uapply u $ unbindTySch t) | (x,t) <- ctx]
   putStrLn ""
   mapM_ putStrLn
       $ reverse [show x++" = "++ printTree(tm2Term t) ++ " ;" | (x,t) <- evctx]
@@ -145,7 +146,7 @@ exeMain = do
     (ctx,u) = case (runTI $ do { ctx <- tiDecs kctx ds []
                                ; u<-getSubst; return (ctx,u)}) of
                 Left errMsg -> error errMsg
-                Right ctx -> ctx
+                Right (ctx,u) -> ([(x,uapply u t) | (x,t) <- ctx],u)
     evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds)) of
               Right x -> x
               Left x -> error x

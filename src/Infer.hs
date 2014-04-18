@@ -270,7 +270,6 @@ ty = runTI $ ti [] [] (lam _x x)
 
 unbindTySch tsch = snd (unsafeUnbind tsch)
 
--- unbindTySch' tsch = snd $ runFreshM (unbind tsch)
 
 -- evaluation
 
@@ -288,7 +287,7 @@ ev ctx (App t1 t2) =
   do v1 <- ev ctx t1
      v2 <- ev ctx t2
      case v1 of
-       Var x -> error $ name2str x ++ " should never happen" -- return $ App v1 v2 -- should never happen
+       Var x -> error $ show x ++ " should never happen" -- return $ App v1 v2 -- should never happen
        Con _ -> return $ App v1 v2
        In _ _ -> return $ App v1 v2
        App _ _ -> return $ App v1 v2
