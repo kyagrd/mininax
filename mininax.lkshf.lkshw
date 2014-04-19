@@ -1,0 +1,10 @@
+Version of workspace file format:
+               1
+Time of storage:
+               "Fri Nov  8 01:01:23 PST 2013"
+Name of the workspace:
+               "mininax.lkshf"
+File paths of contained packages:
+               ["mininax.cabal"]
+Maybe file path of an active package:
+               Just "mininax.cabal"
