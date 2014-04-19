@@ -21,6 +21,8 @@ import Unbound.LocallyNameless
      ( string2Name, name2String, name2Integer, bind, unbind, embed, Embed(..) )
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import qualified Syntax as S
+import Control.Applicative
+import System.IO
 
 bnfc [lbnf|
 antiquote "[" ":" ":]" ;
@@ -166,4 +168,11 @@ tm2Term (S.Alt (Just phi) cs) =
       | (c,(as,e)) <- map (\(nm,bnd) -> (name2String nm, unsafeUnbind bnd)) cs ]
   where
   (nms,ty) = unsafeUnbind phi
+
+
+hTokens h = tokens <$> hGetContents h
+
+hProg h = pProg <$> hTokens h
+
+
 

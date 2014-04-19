@@ -16,16 +16,18 @@ data-dir: ""
  
 executable mininax
     build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
-                   base -any, containers -any, mtl -any, unbound -any
+                   base -any, containers -any, mtl -any, optparse-applicative -any,
+                   unbound -any
     main-is: Main.hs
     buildable: True
     hs-source-dirs: src
-    other-modules: InferDec Syntax Infer Parser
+    other-modules: Syntax InferDec Infer Parser
     ghc-options: -Wall
  
 test-suite test-mininax
     build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
-                   base -any, containers -any, mtl -any, unbound -any
+                   base -any, containers -any, mtl -any, optparse-applicative -any,
+                   unbound -any
     type: exitcode-stdio-1.0
     main-is: Main.hs
     buildable: True

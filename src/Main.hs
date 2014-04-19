@@ -1,5 +1,6 @@
 -- vim: sw=2: ts=2: set expandtab:
-{-# LANGUAGE CPP, TemplateHaskell, QuasiQuotes, NoMonomorphismRestriction #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards,
+             CPP, TemplateHaskell, QuasiQuotes, NoMonomorphismRestriction #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Main
@@ -19,15 +20,19 @@ module Main (
 ) where
 
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Error
-import Control.Monad.Identity
+import Control.Applicative
+-- import Control.Monad.Trans
+-- import Control.Monad.Error
+-- import Control.Monad.Identity
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
-import Language.LBNF.Runtime (printTree)
+import Language.LBNF.Runtime
+-- (printTree)
 import Generics.RepLib.Unify
 import Unbound.LocallyNameless (runFreshMT)
+import System.IO
+import Options.Applicative
 import Syntax
 import Infer
 import InferDec
@@ -112,7 +117,7 @@ ctx = case (runTI $ tiDecs kctx (case program of Prog ds -> ds) [])
          of Right x -> x
             Left x -> error x
 
-evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds)) 
+evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds))
           of Right x -> x
              Left x -> error x
 
@@ -124,34 +129,90 @@ hello s = "Hello " ++ s
 prop_hello s = stripPrefix "Hello " (hello s) == Just s
 
 
+data CmdArgs = CmdArgs
+  { flagKi :: Bool
+  , flagTi :: Bool
+  , flagEv :: Bool
+  , flagAll :: Bool
+  , argFilePath :: Maybe String
+  }
 
--- Hello World
-exeMain = do
-  mapM_ putStrLn
-      $ reverse [show x++" : "++ printTree k | (x,k) <- kctx]
-  putStrLn ""
-  mapM_ putStrLn
-      $ reverse [show x++" : "++ printTree((foldr (.) id (map (uncurry subst) u)) $ unbindTySch t) | (x,t) <- ctx]
---      $ reverse [show x++" : "++ printTree(uapply u $ unbindTySch t) | (x,t) <- ctx]
-  putStrLn ""
-  mapM_ putStrLn
-      $ reverse [show x++" = "++ printTree(tm2Term t) ++ " ;" | (x,t) <- evctx]
-  putStrLn ""
+cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag
+                  <*> filepathArg
   where
-    Prog ds = program
-    dataDecs = [d | d@(Data _ _ _)<- ds]
-    kctx = case (runTI $ kiDataDecs dataDecs []) of
+  kiFlag = switch
+     $ long "kind" <> short 'k'
+    <> help "Kind Inference for type constructors"
+  tiFlag = switch
+     $ long "type" <> short 't'
+    <> help "Type Inference for data constructors and definitions"
+  evFlag = switch
+     $ long "eval" <> short 'e'
+    <> help "Evaluate definitions"
+  allFlag = switch
+     $ long "all" <> short 'a'
+    <> help "Kind Infer, Type Infer, and Evaluate the program"
+  filepathArg = argument (return . str)
+     $ metavar "FILE"
+    <> help "File path argument"
+    <> value Nothing
+
+
+kiProg (Prog ds) = kctx
+  where
+    kctx = case (runTI $ kiDataDecs [d | d@(Data _ _ _)<- ds] []) of
             Left errMsg -> error errMsg
             Right kctx -> kctx
+
+tiProg kctx (Prog ds) = (ctx,u)
+  where
     (ctx,u) = case (runTI $ do { ctx <- tiDecs kctx ds []
                                ; u<-getSubst; return (ctx,u)}) of
                 Left errMsg -> error errMsg
                 Right (ctx,u) -> ([(x,uapply u t) | (x,t) <- ctx],u)
-    evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds)) of
-              Right x -> x
+
+
+
+evProg (Prog ds) = do
+  mapM_ putStrLn
+      $ reverse [show x++" = "++ printTree t ++ " ;" | (x,t) <- evctx]
+  return evctx
+  where
+    evctx = case (runFreshMT $ evDecs [] ds) of
               Left x -> error x
+              Right x -> x
 
+-- The default entry point
+exeMain = execParser opts >>= greet
+  where
+    opts = info (helper <*> cmdArgs)
+             (  fullDesc
+             <> progDesc "mininax command line program"
+             <> header "miniax - command line program for the mininax langauge"
+             )
 
+greet :: CmdArgs -> IO ()
+greet (CmdArgs{..}) = do
+  h <- maybe (return stdin) (\s -> openFile s ReadMode) argFilePath
+  mp <- hProg h
+  let program = case mp of { Ok p -> p; Bad msg -> error msg }
+  let kctx = kiProg program
+  when (flagAll || flagKi || (not flagEv && not flagTi))
+     $ do { mapM_ putStrLn
+                $ reverse [show x++" : "++ printTree k | (x,k) <- kctx]
+          ; putStrLn ""
+          }
+  let (ctx,u) = tiProg kctx program
+  when (flagAll || flagTi || (not flagKi && not flagEv))
+     $ do { mapM_ putStrLn
+                $ reverse [ show x++" : "++
+                            printTree( (foldr (.) id (map (uncurry subst) u) )
+                                       $ unbindTySch t )
+                           | (x,t) <- ctx ]
+          ; putStrLn ""
+          }
+  when (flagAll || flagEv)
+       (evProg program >> putStrLn "")
 
 
 -- Entry point for unit tests.
@@ -172,7 +233,7 @@ main = MAIN_FUNCTION
 *Main> runTI $ ki kctx (type2Ty [type| Pair Bool |])
 Right (KVar k)
 *Main> let Right k = it
-*Main> runTI $ ki kctx (type2Ty [type| Pair Bool |]) >> getSubst 
+*Main> runTI $ ki kctx (type2Ty [type| Pair Bool |]) >> getSubst
 Right [(k,KArr Star Star)]
 *Main> let Right u = it
 -}

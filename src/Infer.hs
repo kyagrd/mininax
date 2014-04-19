@@ -10,7 +10,7 @@
 
 module Infer where
 
-import Data.Char
+-- import Data.Char
 import Data.List
 import Control.Applicative
 -- import Control.Monad
@@ -102,10 +102,10 @@ type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
 ki :: KCtx -> Ty -> KI Ki
 ki ctx (TVar x)  = case lookup x ctx of
                      Nothing -> throwError(strMsg $ name2String x++" undefined")
-                     Just k -> ureturn k -- currently just simple kinds
+                     Just k -> return k -- currently just simple kinds
 ki ctx (TCon x)  = case lookup x ctx of
                      Nothing -> throwError(strMsg $ name2String x++" undefined")
-                     Just k -> ureturn k -- currently just simple kinds
+                     Just k -> return k -- currently just simple kinds
 ki ctx (TArr t1 t2) =
                   do k1 <- ki ctx t1
                      k2 <- ki ctx t2
@@ -117,12 +117,12 @@ ki ctx (TApp t1 t2) =
                      k2 <- ki ctx t2
                      k <- KVar <$> fresh "k"
                      lift $ unify (KArr k2 k) k1
-                     ureturn k
+                     return k
 
 ki ctx (TFix t) = do k1 <- ki ctx t
                      k <- KVar <$> fresh "k"
                      lift $ unify (KArr k k) k1
-                     ureturn k
+                     return k
 
 
 -- freshInst :: Fresh m => TySch -> m Ty
@@ -157,18 +157,18 @@ arity nm kctx = length (kargs k)
 --    where Just k = lookup nm kctx
 
 
-ureturn ty = do { u <- getSubst; return (uapply u ty) }
+-- ureturn ty = do { u <- getSubst; return (uapply u ty) }
 
 -- TODO catch errors and append more context info
 ti :: KCtx -> Ctx -> Tm -> TI Ty
 ti kctx ctx (Var x) =
   case lookup x ctx of
     Nothing -> throwError(strMsg $ name2String x++" undefined")
-    Just tysch -> ureturn =<< freshInst tysch
+    Just tysch -> return =<< freshInst tysch
 ti kctx ctx (Con x) =
   case lookup x ctx of
     Nothing -> throwError(strMsg $ name2String x++" undefined")
-    Just tysch -> ureturn =<< freshInst tysch
+    Just tysch -> return =<< freshInst tysch
 ti kctx ctx (In n t) -- this is a hacky implementation without checking kinds
   | n < 0     = error "In[n] should have non-negative n"
   | otherwise = do ty <- ti kctx ctx t
@@ -176,7 +176,7 @@ ti kctx ctx (In n t) -- this is a hacky implementation without checking kinds
                    is <- sequence $ replicate m (TVar <$> fresh "i")
                    ty1 <- TVar <$> fresh "t"
                    lift $ unify (foldl TApp ty1 (TFix ty1 : is)) ty
-                   ureturn $ foldl TApp (TFix ty1) is
+                   return $ foldl TApp (TFix ty1) is
 ti kctx ctx (MIt b) =
   do (f,tm@(Alt mphi as)) <- unbind b
      r <- fresh "r"
@@ -189,18 +189,18 @@ ti kctx ctx (MIt b) =
      let ctx' = (f,bind is tyf) : ctx
      tytm' <- ti kctx' ctx' tm
      lift $ unify tytm tytm'
-     ureturn $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
+     return $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
 ti kctx ctx (Lam b) =
   do (x, t) <- unbind b
      ty1 <- TVar <$> fresh "a"
      ty2 <- ti kctx ((x, bind [] ty1) : ctx) t
-     ureturn (TArr ty1 ty2)
+     return (TArr ty1 ty2)
 ti kctx ctx (App t1 t2) =
   do ty1 <- ti kctx ctx t1
      ty2 <- ti kctx ctx t2
      ty <- TVar <$> fresh "a"
      lift $ unify (TArr ty2 ty) ty1
-     ureturn ty
+     return ty
 ti kctx ctx (Let b) =
   do ((x, Embed t1), t2) <- unbind b
      ty <- ti kctx ctx t1
@@ -210,10 +210,10 @@ ti kctx ctx (Alt _ []) = throwError(strMsg "empty Alts")
 ti kctx ctx (Alt Nothing as) =
   do tys <- mapM (tiAlt kctx ctx) as
      lift $ unifyMany (zip tys (tail tys))
-     ureturn (head tys)
+     return (head tys)
 ti kctx ctx (Alt (Just im) as) =
   do tys <- mapM (tiAlt kctx ctx) as
-     let (tcon : args) = tApp2list $ case (head tys) of TArr ty _ -> ty
+     let (tcon : args) = tApp2list $ case (head tys) of TArr t _ -> t
      (is, rngty) <- unbind im
      when (length is > length args)
         $ throwError(strMsg $ "too many indices in "++show im)
@@ -222,7 +222,7 @@ ti kctx ctx (Alt (Just im) as) =
      let tysch = bind is (TArr domty rngty)
      tys' <- mapM freshInst (replicate (length as) tysch)
      lift $ unifyMany (zip tys' tys)
-     ureturn =<< freshInst tysch
+     return =<< freshInst tysch
 
 
 replaceSuffix xs ys = reverse (drop (length ys) (reverse xs)) ++ ys
