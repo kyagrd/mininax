@@ -203,7 +203,7 @@ greet (CmdArgs{..}) = do
           ; putStrLn ""
           }
   let (ctx,u) = tiProg kctx program
-  print ctx
+  -- print ctx
   when (flagAll || flagTi || (not flagKi && not flagEv))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
