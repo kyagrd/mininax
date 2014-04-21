@@ -216,7 +216,9 @@ ti kctx ctx (App t1 t2) =
 ti kctx ctx (Let b) =
   do ((x, Embed t1), t2) <- unbind b
      ty <- ti kctx ctx t1
-     let tysch = closeTy [] ctx ty
+     u <- getSubst
+     -- let tysch = closeTy [] ctx (uapply u ty)
+     let tysch = closeTy [] ctx (foldr (.) id (map (uncurry subst) u) ty)
      ti kctx ((x, tysch) : ctx) t2
 ti kctx ctx (Alt _ []) = throwError(strMsg "empty Alts")
 ti kctx ctx (Alt Nothing as) =

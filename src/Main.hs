@@ -218,10 +218,10 @@ greet (CmdArgs{..}) = do
 
 
 mygreet = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
-                         ,argFilePath=Just "../test.mininax"}
+                         ,argFilePath=Just "../test/test.mininax"}
 
 mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
-                         ,argFilePath=Just "../test.mininax"}
+                         ,argFilePath=Just "../test/test.mininax"}
 
 
 
