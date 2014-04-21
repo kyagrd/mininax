@@ -138,7 +138,10 @@ n10 : Mu N
 n11 : Mu N
 n12 : Mu N
 n13 : Mu N
+```
 
+You can try `-h` or `--help` option for more information.
+```
 shell-prmompt> mininax -h
 miniax - command line program for the mininax langauge
 
@@ -153,10 +156,9 @@ Available options:
   -a,--all                 Kind Infer, Type Infer, and Evaluate the program
   FILE                     File path argument
 ```
-You can try `-h` or `--help` option for more information.
+
 Using either `-e` option or `-a` optoin,
 you can examine values of top level definitions.
-
 
 ```
 shell-prmompt> mininax -e test.mininax
