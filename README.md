@@ -3,6 +3,9 @@ mininax
 
 Implementaton of type inference and evaluator for the Nax programing langauge
 without certain features including term indices and GADTs.
+The features for GADTs include heterogeneous return type indicies
+and exsistential type variables in the types for data constructors.
+These GADT related featurs are excluded in mininax.
 
 
 Here is an example miniax code.

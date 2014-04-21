@@ -13,6 +13,7 @@ description: Minimal implementation of the Nax programming language without term
 category: Language
 author: Ki Yung Ahn
 data-dir: ""
+extra-source-files: /home/kyagrd/cscs/mininax/test/test.mininax
  
 executable mininax
     build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
