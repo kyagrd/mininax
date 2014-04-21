@@ -73,9 +73,6 @@ mguMany ps =
 
 getSubst = do { UState _ s <- lift get; return s }
 
-extSubst = mapM_ extendSubst
-
-
 extendSubst (x,t) =
   do u <- getSubst
      case lookup x u of
@@ -87,12 +84,12 @@ extendSubst (x,t) =
 unify t1 t2 =
   do s <- getSubst
      u <- mgu (uapply s t1) (uapply s t2)
-     extSubst u
+     mapM_ extendSubst u
 
 unifyMany ps =
   do s <- getSubst
      u <- mguMany [(uapply s t1, uapply s t2) | (t1, t2) <- ps]
-     extSubst u
+     mapM_ extendSubst u
 
 
 type KCtx = [(TyName,Ki)]
@@ -125,10 +122,7 @@ ki ctx (TFix t) = do k1 <- ki ctx t
                      return k
 
 
--- freshInst :: Fresh m => TySch -> m Ty
 freshInst tysch = liftM snd (unbind tysch)
--- closeTy :: Ctx -> Ty -> TySch
--- closeTy ctx ty = bind (nub(fv ty \\ fv ctx)) ty
 
 closeTy :: KCtx -> Ctx -> Ty -> TySch
 closeTy kctx ctx ty = bind (nub((fv ty \\ fv ctx) \\ fv kctx)) ty
@@ -190,6 +184,24 @@ ti kctx ctx (MIt b) =
      tytm' <- ti kctx' ctx' tm
      lift $ unify tytm tytm'
      return $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
+
+ti kctx ctx (MPr b) =
+  do ((f,cast),tm@(Alt mphi as)) <- unbind b
+     r <- fresh "r"
+     t <- fresh "t"
+     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (TVar <$> fresh "b")
+                                 Just phi -> unbind phi
+     let tyf    = foldl1 TApp (TCon r : map TVar is) `TArr` tyret
+     let tycast = foldl1 TApp (TCon r : map TVar is) `TArr`
+                  foldr1 TApp (TFix (TVar t) : map TVar is)
+     let tytm   = foldl1 TApp (TVar t : TCon r : map TVar is) `TArr` tyret
+     let kctx' = (r, undefined {- TODO this is hack -}) : kctx
+     let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
+     tytm' <- ti kctx' ctx' tm
+     lift $ unify tytm tytm'
+     return $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
+
+
 ti kctx ctx (Lam b) =
   do (x, t) <- unbind b
      ty1 <- TVar <$> fresh "a"
@@ -282,6 +294,7 @@ ev ctx (Var x) =
 ev ctx v@(Con x) = return v
 ev ctx (In n t) = In n <$> ev ctx t
 ev ctx v@(MIt b) = return v
+ev ctx v@(MPr b) = return v
 ev ctx v@(Lam b) = return v
 ev ctx (App t1 t2) =
   do v1 <- ev ctx t1
@@ -298,6 +311,10 @@ ev ctx (App t1 t2) =
                    let ctx' = (f,v1) : ctx
                    let In _ v = v2
                    sreturn [(f,v1)] =<< ev ctx' (App t v)
+       MPr b -> do ((f,cast),t) <- unbind b
+                   let ctx' = (f,v1) : (cast,lam _x x) : ctx
+                   let In _ v = v2
+                   sreturn [(f,v1),(cast,lam _x x)] =<< ev ctx' (App t v)
        Alt m as ->
          do let (Con c:vs) = app2list v2
             case lookup c as of

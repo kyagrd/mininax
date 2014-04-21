@@ -18,7 +18,7 @@ module Parser where
 
 import Language.LBNF
 import Unbound.LocallyNameless
-     ( string2Name, name2String, name2Integer, bind, unbind, embed, Embed(..) )
+     ( string2Name, bind, unbind, embed, Embed(..) )
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import qualified Syntax as S
 import Control.Applicative
@@ -47,6 +47,8 @@ Con. Term3 ::= UIdent ;
 In . Term2 ::= "In" Integer Term2 ;
 MIt . Term2 ::= "mit" LIdent "{" [Alt] "}" ;
 MItAnn . Term2 ::= "mit" LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
+MPr . Term2 ::= "mpr" LIdent LIdent "{" [Alt] "}" ;
+MPrAnn . Term2 ::= "mpr" LIdent LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
 Lam. Term1 ::= "\\" LIdent "->" Term1 ;
 App. Term2 ::= Term2 Term3 ;
 Let. Term1 ::= "let" LIdent "=" Term1 "in" Term1 ;
@@ -110,27 +112,32 @@ type2Ty (TApp t1 t2) = S.TApp (type2Ty t1) (type2Ty t2)
 type2Ty (TFix t) = S.TFix (type2Ty t)
 
 ty2Type (S.TVar nm) = TVar (LIdent $ show nm)
-ty2Type (S.TCon nm) = TCon (UIdent $ name2String nm)
+ty2Type (S.TCon nm) = TCon (UIdent $ show nm)
 ty2Type (S.TArr t1 t2) = TArr (ty2Type t1) (ty2Type t2)
 ty2Type (S.TApp t1 t2) = TApp (ty2Type t1) (ty2Type t2)
 ty2Type (S.TFix t) = TFix (ty2Type t)
 
 
+case2SAltItem (Case (UIdent c) xs e) =
+    ( string2Name c, bind [string2Name x | LIdent x <- xs] (term2Tm e) )
+
+phi2SPhi (Phi xs ty) = bind [string2Name s | LIdent s <- xs] (type2Ty ty)
+
 term2Tm (Var (LIdent s)) = S.Var (string2Name s)
 term2Tm (Con (UIdent s)) = S.Con (string2Name s)
 term2Tm (In n e) = S.In n (term2Tm e)
-term2Tm (MIt (LIdent f) as) = S.MIt $ bind (string2Name f) $
-  S.Alt Nothing
-       [ (string2Name c, bind [string2Name x | LIdent x <- xs] (term2Tm e))
-        | Case (UIdent c) xs e <- as]
-term2Tm (MItAnn (LIdent f) (Phi xs ty) as) = S.MIt $ bind (string2Name f) $
-  S.Alt (Just $ bind [string2Name s | LIdent s <- xs] (type2Ty ty))
-        [ (string2Name c, bind [string2Name x | LIdent x <- xs] (term2Tm e))
-         | Case (UIdent c) xs e <- as]
+term2Tm (MIt (LIdent f) as) =
+  S.MIt $ bind (string2Name f) $ term2Tm (Alt as)
+term2Tm (MItAnn (LIdent f) phi as) =
+  S.MIt $ bind (string2Name f) $ term2Tm (AltAnn phi as)
+term2Tm (MPr (LIdent f) (LIdent cast) as) =
+  S.MPr $ bind (string2Name f, string2Name cast) $ term2Tm (Alt as)
+term2Tm (MPrAnn (LIdent f) (LIdent cast) phi as) =
+  S.MPr $ bind (string2Name f, string2Name cast) $ term2Tm (AltAnn phi as)
 term2Tm (Lam (LIdent s) e) = S.Lam (bind (string2Name s) (term2Tm e))
 term2Tm (App e1 e2) = S.App (term2Tm e1) (term2Tm e2)
-term2Tm (Let (LIdent s) e1 e2) = S.Let (bind (string2Name s, embed (term2Tm e1))
-                                             (term2Tm e2))
+term2Tm (Let (LIdent s) e1 e2) =
+        S.Let (bind (string2Name s, embed (term2Tm e1)) (term2Tm e2))
 term2Tm (Alt cs) = S.Alt Nothing
         [ (string2Name c, bind [string2Name s | LIdent s <- as] (term2Tm e))
          | Case (UIdent c) as e <- cs ]
@@ -144,16 +151,17 @@ tm2Term (S.Var nm) = Var (LIdent $ show nm)
 tm2Term (S.Con nm) = Con (UIdent $ show nm)
 tm2Term (S.In n e) = In n (tm2Term e)
 tm2Term (S.MIt b) =
-  mit [Case (UIdent c) (map LIdent xs) (tm2Term e) | (c,xs,e) <- as'']
+  case tm2Term sAlt of
+    Alt cs        -> MIt    (LIdent $ show nm)     cs
+    AltAnn phi cs -> MItAnn (LIdent $ show nm) phi cs
   where
-  (nm,S.Alt mphi as) = unsafeUnbind b
-  as'' = [(c, map show xs, e) | (c,(xs,e)) <- as']
-  as' = [(name2String c,unsafeUnbind b) | (c,b) <- as]
-  mit = case mphi of
-          Nothing -> MIt (LIdent $ show nm)
-          Just b -> let (is,ty) = unsafeUnbind b
-                     in MItAnn (LIdent $ show nm)
-                             $ Phi [LIdent(show i) | i<-is] (ty2Type ty)
+  (nm,sAlt) = unsafeUnbind b
+tm2Term (S.MPr b) =
+  case tm2Term sAlt of
+    Alt cs        -> MPr    (LIdent $ show nm1) (LIdent $ show nm2)     cs
+    AltAnn phi cs -> MPrAnn (LIdent $ show nm1) (LIdent $ show nm2) phi cs
+  where
+  ((nm1,nm2),sAlt) = unsafeUnbind b
 tm2Term (S.Lam bnd) = Lam (LIdent $ show nm) (tm2Term e)
           where (nm,e) = unsafeUnbind bnd
 tm2Term (S.App e1 e2) = App (tm2Term e1) (tm2Term e2)
@@ -161,11 +169,11 @@ tm2Term (S.Let bnd) = Let (LIdent $ show nm) (tm2Term e1) (tm2Term e2)
           where ((nm,Embed e1),e2) = unsafeUnbind bnd
 tm2Term (S.Alt Nothing cs) =
   Alt [ Case (UIdent c) (map (LIdent . show) as) (tm2Term e)
-      | (c,(as,e)) <- map (\(nm,bnd) -> (name2String nm, unsafeUnbind bnd)) cs ]
+      | (c,(as,e)) <- map (\(nm,bnd) -> (show nm, unsafeUnbind bnd)) cs ]
 tm2Term (S.Alt (Just phi) cs) =
   AltAnn (Phi (map (LIdent . show) nms) (ty2Type ty))
       [ Case (UIdent c) (map (LIdent . show) as) (tm2Term e)
-      | (c,(as,e)) <- map (\(nm,bnd) -> (name2String nm, unsafeUnbind bnd)) cs ]
+      | (c,(as,e)) <- map (\(nm,bnd) -> (show nm, unsafeUnbind bnd)) cs ]
   where
   (nms,ty) = unsafeUnbind phi
 

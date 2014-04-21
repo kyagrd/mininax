@@ -23,9 +23,9 @@
 -----------------------------------------------------------------------------
 
 module Syntax (
-   TmName, Tm(..), printTm
- , TyName, Ty(..), printTy
- , KiName, Ki(..), printKi
+   TmName, Tm(..) -- , printTm
+ , TyName, Ty(..) -- , printTy
+ , KiName, Ki(..) -- , printKi
 ) where
 
 -- import Control.Monad
@@ -57,6 +57,7 @@ data Tm = Var TmName
         | Con TmName
         | In Integer Tm
         | MIt (Bind TmName Tm) -- Tm must be Alt
+        | MPr (Bind (TmName,TmName) Tm) -- Tm must be Alt
         | Lam (Bind TmName Tm)
         | App Tm Tm
         | Let (Bind (TmName, Embed Tm) Tm)
@@ -93,11 +94,8 @@ instance Subst Ty Ty where
 instance Rep a => IsString (Name a) where
   fromString = string2Name
 
--- wrapper for unless over monadic conditions
 
--- unlessM mb x = do b <- mb
---                   unless b x
-
+{-
 -- simple dumb serializer using unsafeUnbind
 printKi :: Ki -> String
 printKi (KVar x)    = show x
@@ -115,20 +113,22 @@ printTm :: Tm -> String
 printTm (Var x) = show x
 printTm (Con x) = show x
 printTm (In n t) = "(In["++show n++"] "++printTm t++")"
-printTm (MIt b) = "(MIt "++show nm ++" "++ printTm t++")"
+printTm (MIt b) = "(mit "++show nm ++" "++ printTm t++")"
   where (nm,t) = unsafeUnbind b
+printTm (MPr b) = "(mpr "++ show nm1 ++" "++ show nm2++" "++ printTm t++")"
+  where ((nm1,nm2),t) = unsafeUnbind b
 printTm (Lam b) = "(\\"++show nm++"."++printTm t++")"
   where (nm,t) = unsafeUnbind b
 printTm (App t1 t2) = "("++printTm t1 ++" "++ printTm t2++")"
-printTm (Let b) = "(let "++name2String nm++" = "++printTm t1++" in "++printTm t2++")"
+printTm (Let b) = "(let "++show nm++" = "++printTm t1++" in "++printTm t2++")"
   where ((nm,Embed t1),t2) = unsafeUnbind b
 printTm (Alt mb as) = maybe "" printIxMap mb ++
   "{"++ concat (intersperse "; " (map printAlt as)) ++"}"
 
 printAlt :: (TmName,Bind [TmName] Tm) -> [Char]
-printAlt (nm,b) = unwords (map name2String (nm:nms)) ++ " -> " ++ printTm t
+printAlt (nm,b) = unwords (map show (nm:nms)) ++ " -> " ++ printTm t
   where (nms,t) = unsafeUnbind b
 
-printIxMap b = "["++ unwords (map name2String ns) ++" . "++ printTy ty ++"]"
+printIxMap b = "["++ unwords (map show ns) ++" . "++ printTy ty ++"]"
   where (ns,ty) = unsafeUnbind b
-
+-}

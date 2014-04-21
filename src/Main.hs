@@ -203,6 +203,7 @@ greet (CmdArgs{..}) = do
           ; putStrLn ""
           }
   let (ctx,u) = tiProg kctx program
+  print ctx
   when (flagAll || flagTi || (not flagKi && not flagEv))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
@@ -213,6 +214,15 @@ greet (CmdArgs{..}) = do
           }
   when (flagAll || flagEv)
        (evProg program >> putStrLn "")
+
+
+
+mygreet = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
+                         ,argFilePath=Just "../test.mininax"}
+
+mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
+                         ,argFilePath=Just "../test.mininax"}
+
 
 
 -- Entry point for unit tests.

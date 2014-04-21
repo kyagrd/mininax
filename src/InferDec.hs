@@ -26,6 +26,7 @@ import Data.List
 import Control.Monad
 import Control.Monad.Trans
 import Control.Applicative
+import Generics.RepLib.Unify (subst)
 import Unbound.LocallyNameless ( fresh, string2Name )
 import GHC.Exts( IsString(..) )
 
@@ -41,7 +42,9 @@ tiDec :: KCtx -> Dec -> Ctx -> TI Ctx
 tiDec kctx (Def (LIdent x) t) ctx =
   do ty <- ti kctx ctx (term2Tm t)
      u <- getSubst
-     return $ (string2Name x, closeTy kctx ctx (uapply u ty)) : ctx
+     -- return $ (string2Name x, closeTy kctx ctx (uapply u ty)) : ctx
+     return $ (string2Name x, closeTy kctx ctx (foldr (.) id (map (uncurry subst) u) ty)) : ctx
+
 tiDec kctx (Data (UIdent tc) is dAlts) ctx =
   do return $ [ (string2Name c, closeTy kctx ctx (foldr TArr retTy $ map type2Ty ts))
                | DAlt (UIdent c) ts <- dAlts ] ++ ctx
