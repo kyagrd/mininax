@@ -6,7 +6,6 @@
              FlexibleContexts,
              UndecidableInstances,
              OverloadedStrings,
-             GADTs,
              CPP #-}
 -----------------------------------------------------------------------------
 --
@@ -28,14 +27,13 @@ module Syntax (
  , KiName, Ki(..) -- , printKi
 ) where
 
--- import Control.Monad
--- import Control.Monad.Trans.Error
-
 import Unbound.LocallyNameless hiding (Con)
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 -- import qualified Data.Set as S
 import Data.List (intersperse)
 import GHC.Exts( IsString(..) )
+-- import Language.LBNF (printTree)
+-- import {-# SOURCE #-} Parser (ki2Kind, ty2Type, tm2Term)
 
 type KiName = Name Ki
 type TyName = Name Ty
@@ -44,14 +42,14 @@ type TmName = Name Tm
 data Ki = KVar KiName
         | Star
         | KArr Ki Ki
-   deriving Show
+   -- deriving Show
 
 data Ty = TVar TyName
         | TCon TyName
         | TArr Ty Ty
         | TApp Ty Ty
         | TFix Ty -- Ty must be TCon or application of TCon to other arguments
-   deriving Show
+   -- deriving Show
 
 data Tm = Var TmName
         | Con TmName
@@ -62,73 +60,19 @@ data Tm = Var TmName
         | App Tm Tm
         | Let (Bind (TmName, Embed Tm) Tm)
         | Alt (Maybe IxMap) [(TmName,(Bind [TmName] Tm))]
-   deriving Show
+   -- deriving Show
 
 -- assuming only variable form of indicies in IxMap
 type IxMap = Bind [TyName] Ty
 
 $(derive [''Ki, ''Ty, ''Tm])
 
-------------------------------------------------------
-instance Alpha Ki where
-instance Alpha Ty where
-instance Alpha Tm where
-
-instance Subst Ki Ki where
-  isvar (KVar x) = Just (SubstName x)
-  isvar _ = Nothing
-instance Subst Ty Ki where
-instance Subst Ty Tm where
-instance Subst Tm Ki where
-instance Subst Tm Ty where
-instance Subst Tm Tm where
-  isvar (Var x) = Just (SubstName x)
-  isvar (Con x) = Just (SubstName x)
-  isvar _  = Nothing
-instance Subst Ty Ty where
-  isvar (TVar x) = Just (SubstName x)
-  isvar (TCon x) = Just (SubstName x)
-  isvar _ = Nothing
-
 -- names as string literals
 instance Rep a => IsString (Name a) where
   fromString = string2Name
 
 
-{-
--- simple dumb serializer using unsafeUnbind
-printKi :: Ki -> String
-printKi (KVar x)    = show x
-printKi Star         = "*"
-printKi (KArr k1 k2) = "("++printKi k1++" -> "++printKi k2++")"
+-- Alpha and Sbust instances are in Parser module
+-- in order to avoid mutually recursive module imports
+-- since Show class instantces for Ki, Ty, Tm depends on LBNF functions
 
-printTy :: Ty -> String
-printTy (TVar x) = show x
-printTy (TCon x) = show x
-printTy (TArr t1 t2) = "("++printTy t1++" -> "++printTy t2++")"
-printTy (TApp t1 t2) = "("++printTy t1++" "++printTy t2++")"
-printTy (TFix t) = "(Mu "++printTy t++")"
-
-printTm :: Tm -> String
-printTm (Var x) = show x
-printTm (Con x) = show x
-printTm (In n t) = "(In["++show n++"] "++printTm t++")"
-printTm (MIt b) = "(mit "++show nm ++" "++ printTm t++")"
-  where (nm,t) = unsafeUnbind b
-printTm (MPr b) = "(mpr "++ show nm1 ++" "++ show nm2++" "++ printTm t++")"
-  where ((nm1,nm2),t) = unsafeUnbind b
-printTm (Lam b) = "(\\"++show nm++"."++printTm t++")"
-  where (nm,t) = unsafeUnbind b
-printTm (App t1 t2) = "("++printTm t1 ++" "++ printTm t2++")"
-printTm (Let b) = "(let "++show nm++" = "++printTm t1++" in "++printTm t2++")"
-  where ((nm,Embed t1),t2) = unsafeUnbind b
-printTm (Alt mb as) = maybe "" printIxMap mb ++
-  "{"++ concat (intersperse "; " (map printAlt as)) ++"}"
-
-printAlt :: (TmName,Bind [TmName] Tm) -> [Char]
-printAlt (nm,b) = unwords (map show (nm:nms)) ++ " -> " ++ printTm t
-  where (nms,t) = unsafeUnbind b
-
-printIxMap b = "["++ unwords (map show ns) ++" . "++ printTy ty ++"]"
-  where (ns,ty) = unsafeUnbind b
--}

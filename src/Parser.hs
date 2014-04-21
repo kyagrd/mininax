@@ -1,5 +1,10 @@
 -- vim: sw=2: ts=2: set expandtab:
-{-# LANGUAGE QuasiQuotes, TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes, TemplateHaskell,
+             FlexibleInstances,
+             MultiParamTypeClasses,
+             FlexibleContexts,
+             UndecidableInstances
+  #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Parser
@@ -17,9 +22,9 @@
 module Parser where
 
 import Language.LBNF
-import Unbound.LocallyNameless
-     ( string2Name, bind, unbind, embed, Embed(..) )
+import Unbound.LocallyNameless hiding (Con, Data)
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
+import Syntax (Ki, Ty, Tm)
 import qualified Syntax as S
 import Control.Applicative
 import System.IO
@@ -80,19 +85,17 @@ comment "--" ;
 comment "{-" "-}"
 |]
 
-
-instance Print S.Ki where
+instance Print Ki where
   prt n = prt n . ki2Kind
   prtList = prtList . map ki2Kind
 
-instance Print S.Ty where
+instance Print Ty where
   prt n = prt n . ty2Type
   prtList = prtList . map ty2Type
 
-instance Print S.Tm where
+instance Print Tm where
   prt n = prt n . tm2Term
   prtList = prtList . map tm2Term
-
 
 -- Translating between BNFC syntax and Unbound syntax
 
@@ -182,5 +185,30 @@ hTokens h = tokens <$> hGetContents h
 
 hProg h = pProg <$> hTokens h
 
+
+------------------------------------------------------
+instance Show Ki where show = printTree
+instance Show Ty where show = printTree
+instance Show Tm where show = printTree
+
+instance Alpha Ki where
+instance Alpha Ty where
+instance Alpha Tm where
+
+instance Subst Ki Ki where
+  isvar (S.KVar x) = Just (SubstName x)
+  isvar _ = Nothing
+instance Subst Ty Ki where
+instance Subst Ty Tm where
+instance Subst Tm Ki where
+instance Subst Tm Ty where
+instance Subst Tm Tm where
+  isvar (S.Var x) = Just (SubstName x)
+  isvar (S.Con x) = Just (SubstName x)
+  isvar _  = Nothing
+instance Subst Ty Ty where
+  isvar (S.TVar x) = Just (SubstName x)
+  isvar (S.TCon x) = Just (SubstName x)
+  isvar _ = Nothing
 
 
