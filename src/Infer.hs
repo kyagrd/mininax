@@ -6,11 +6,11 @@
              OverloadedStrings,
              GADTs,
              NoMonomorphismRestriction,
+             ScopedTypeVariables,
              CPP #-}
 
 module Infer where
 
--- import Data.Char
 import Data.List
 import Control.Applicative
 -- import Control.Monad
@@ -20,13 +20,30 @@ import Control.Monad.State
 import Language.LBNF.Runtime
 import Parser ()
 -- import Generics.RepLib
-import Generics.RepLib.Unify
+import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless hiding (subst, Con)
 import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
 
 import Syntax
+
+
+solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Either UnifyError [(n, a)]
+solveUnification (eqs :: [(a, a)]) =
+    case r of Left e  -> throwError e
+              Right _ -> return $ uSubst final
+    where
+    (r, final) = runState (runErrorT rwConstraints) (UState cs [])
+    cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
+    rwConstraints :: UM n a ()
+    rwConstraints =
+      do c <- dequeueConstraint
+         case c of Just (UC d a1 a2) ->
+                           do unifyStepD d (undefined :: Proxy (n, a)) a1 a2
+                              rwConstraints
+                   Nothing -> return ()
+
 
 instance HasVar KiName Ki where
   is_var (KVar nm) = Just nm
@@ -58,14 +75,14 @@ uapply s = foldr (.) id (map (uncurry subst) s)
 
 mgu t1 t2 =
   case solveUnification [(t1, t2)] of
-    Nothing -> throwError (strMsg errstr)
-    Just u -> return u
+    Left e  -> throwError (strMsg $ e ++ "\n\t"++ errstr)
+    Right u -> return u
   where errstr = "cannot unify "++printTree t1++" and "++printTree t2
 
 mguMany ps =
   case solveUnification ps of
-    Nothing -> throwError (strMsg errstr)
-    Just u -> return u
+    Left e  -> throwError (strMsg $ e ++ "\n\t" ++ errstr)
+    Right u -> return u
   where errstr = "cannot unify \n" ++
                  ( concat [ "\t"++printTree t1++" and "++printTree t2++"\n"
                           | (t1,t2)<-ps ] )
@@ -80,16 +97,9 @@ extendSubst (x,t) =
        Just t' -> unify t t' >> extendSubstitution (x,t)
 
 
--- unify :: Ty -> Ty -> UM TyName Ty ()
-unify t1 t2 =
-  do s <- getSubst
-     u <- mgu (uapply s t1) (uapply s t2)
-     mapM_ extendSubst u
+unify t1 t2 = mapM_ extendSubst =<< mgu t1 t2
 
-unifyMany ps =
-  do s <- getSubst
-     u <- mguMany [(uapply s t1, uapply s t2) | (t1, t2) <- ps]
-     mapM_ extendSubst u
+unifyMany ps = mapM_ extendSubst =<< mguMany ps
 
 
 type KCtx = [(TyName,Ki)]

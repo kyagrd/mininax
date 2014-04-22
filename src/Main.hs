@@ -22,7 +22,7 @@ module Main (
 import Control.Monad
 import Control.Applicative
 -- import Control.Monad.Trans
--- import Control.Monad.Error
+import Control.Monad.Error
 -- import Control.Monad.Identity
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
@@ -212,6 +212,7 @@ greet (CmdArgs{..}) = do
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }
+
   when (flagAll || flagEv)
        (evProg program >> putStrLn "")
 

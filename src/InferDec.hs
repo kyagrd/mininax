@@ -24,6 +24,7 @@ module InferDec where
 
 import Data.List
 import Control.Monad
+import Control.Monad.Error
 import Control.Monad.Trans
 import Control.Applicative
 import Generics.RepLib.Unify (subst)
@@ -41,9 +42,12 @@ tiDecs kctx ds = foldl1 (>=>) (map (tiDec kctx) ds)
 tiDec :: KCtx -> Dec -> Ctx -> TI Ctx
 tiDec kctx (Def (LIdent x) t) ctx =
   do ty <- ti kctx ctx (term2Tm t)
+           `catchError`
+           (\e -> throwError . strMsg $ e ++ "\n\t"
+                                     ++ "when checking defintion of " ++ x)
      u <- getSubst
-     -- return $ (string2Name x, closeTy kctx ctx (uapply u ty)) : ctx
      return $ (string2Name x, closeTy kctx ctx (foldr (.) id (map (uncurry subst) u) ty)) : ctx
+  -- return $ (string2Name x, closeTy kctx ctx (uapply u ty)) : ctx
 
 tiDec kctx (Data (UIdent tc) is dAlts) ctx =
   do return $ [ (string2Name c, closeTy kctx ctx (foldr TArr retTy $ map type2Ty ts))

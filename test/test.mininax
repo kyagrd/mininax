@@ -13,7 +13,7 @@ id = \x -> x ;
 x = id;
 z = {True -> True; False -> False};
 z2 = {Nothing -> False; Just x -> True};
-b = True ;
+b = True;
 c = x b;
 p = Pair ;
 z3 = Pair True False;
@@ -42,7 +42,8 @@ psum = mit sum {{ a . (a -> Mu N) -> Mu N }}
                                    (sum xs {Pair a b -> plus (f a) (f b)} )
            } ;
 mult = mit mul { Z   -> \m -> zero
-               ; S n -> \m -> plus m (mul n m) } ;
+               ; S n -> \m -> plus m (mul n m)
+               } ;
 factorial = mpr fac cast { Z   -> one
                          ; S n -> mult (succ (cast n)) (fac n)
                          } ;
