@@ -37,6 +37,8 @@ import Parser ( type2Ty, term2Tm )
 -- import qualified Parser as P
 import Infer
 
+-- TODO check uniqueness of TCon and Con names (not yet checking uniqueness)
+
 tiDecs kctx ds = foldl1 (>=>) (map (tiDec kctx) ds)
 
 tiDec :: KCtx -> Dec -> Ctx -> TI Ctx
