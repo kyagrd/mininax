@@ -29,6 +29,8 @@ import GHC.Exts( IsString(..) )
 import Syntax
 
 
+-- modified the Generics.Replib.Unify version to throwError rather than error
+-- TODO can be even better if we pass curret stat rather than (Ustate cs []) 
 solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Either UnifyError [(n, a)]
 solveUnification (eqs :: [(a, a)]) =
     case r of Left e  -> throwError e
