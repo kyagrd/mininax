@@ -22,18 +22,13 @@
 -----------------------------------------------------------------------------
 
 module Syntax (
-   TmName, Tm(..) -- , printTm
- , TyName, Ty(..) -- , printTy
- , KiName, Ki(..) -- , printKi
+   TmName, Tm(..)
+ , TyName, Ty(..)
+ , KiName, Ki(..)
 ) where
 
 import Unbound.LocallyNameless hiding (Con)
-import Unbound.LocallyNameless.Ops (unsafeUnbind)
--- import qualified Data.Set as S
-import Data.List (intersperse)
 import GHC.Exts( IsString(..) )
--- import Language.LBNF (printTree)
--- import {-# SOURCE #-} Parser (ki2Kind, ty2Type, tm2Term)
 
 type KiName = Name Ki
 type TyName = Name Ty
