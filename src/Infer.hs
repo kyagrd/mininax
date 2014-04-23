@@ -30,22 +30,23 @@ import Syntax
 
 
 -- modified the Generics.Replib.Unify version to throwError rather than error
--- TODO can be even better if we pass curret stat rather than (Ustate cs []) 
-solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Either UnifyError [(n, a)]
+-- TODO Can be even better if we pass curret stat rather than (Ustate cs [])?
+--      somehow this idea doesn't work ... [] replaced with current subst loops
+-- solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Either UnifyError [(n, a)]
 solveUnification (eqs :: [(a, a)]) =
-    case r of Left e  -> throwError e
-              Right _ -> return $ uSubst final
-    where
-    (r, final) = runState (runErrorT rwConstraints) (UState cs [])
-    cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
-    rwConstraints :: UM n a ()
-    rwConstraints =
-      do c <- dequeueConstraint
-         case c of Just (UC d a1 a2) ->
-                           do unifyStepD d (undefined :: Proxy (n, a)) a1 a2
-                              rwConstraints
-                   Nothing -> return ()
-
+     r >> return (uSubst final)
+     -- case r of Left e  -> throwError e
+     --           Right _ -> return $ uSubst final
+     where
+     (r, final) = runState (runErrorT rwConstraints) (UState cs [])
+     cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
+     rwConstraints :: UM n a ()
+     rwConstraints =
+       do c <- dequeueConstraint
+          case c of Just (UC d a1 a2) ->
+                            do unifyStepD d (undefined :: Proxy (n, a)) a1 a2
+                               rwConstraints
+                    Nothing -> return ()
 
 instance HasVar KiName Ki where
   is_var (KVar nm) = Just nm
@@ -73,15 +74,20 @@ instance (Eq n, Show n, HasVar n Ty) => Unify n Ty (Name s) where
 instance (Eq n, Show n, HasVar n Ty) => Unify n Ty String where
   unifyStep _ = unifyStepEq
 
+
+-- Don't know why but sometimes have to manually inline this.
+-- Myabe because of some dictionary passing craziness on subst???
 uapply s = foldr (.) id (map (uncurry subst) s)
 
-mgu t1 t2 =
+mgu t1 t2 = do
+  -- s <- getSubst
   case solveUnification [(t1, t2)] of
     Left e  -> throwError (strMsg $ e ++ "\n\t"++ errstr)
     Right u -> return u
   where errstr = "cannot unify "++printTree t1++" and "++printTree t2
 
-mguMany ps =
+mguMany ps = do
+  -- s <- getSubst
   case solveUnification ps of
     Left e  -> throwError (strMsg $ e ++ "\n\t" ++ errstr)
     Right u -> return u
@@ -314,7 +320,7 @@ ev ctx (App t1 t2) =
   do v1 <- ev ctx t1
      v2 <- ev ctx t2
      case v1 of
-       Var x -> error $ show x ++ " should never happen" -- return $ App v1 v2 -- should never happen
+       Var x -> error $ show x ++ " (free variable): should never happen"
        Con _ -> return $ App v1 v2
        In _ _ -> return $ App v1 v2
        App _ _ -> return $ App v1 v2
