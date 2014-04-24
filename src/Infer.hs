@@ -211,7 +211,7 @@ ti kctx ctx (MPr b) =
                                  Just phi -> unbind phi
      let tyf    = foldl1 TApp (TCon r : map TVar is) `TArr` tyret
      let tycast = foldl1 TApp (TCon r : map TVar is) `TArr`
-                  foldr1 TApp (TFix (TVar t) : map TVar is)
+                  foldl1 TApp (TFix (TVar t) : map TVar is)
      let tytm   = foldl1 TApp (TVar t : TCon r : map TVar is) `TArr` tyret
      let kctx' = (r, undefined {- TODO this is hack -}) : kctx
      let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
