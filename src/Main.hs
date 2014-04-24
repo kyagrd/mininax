@@ -160,14 +160,15 @@ cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag
 
 kiProg (Prog ds) = kctx
   where
-    kctx = case (runTI $ kiDataDecs [d | d@(Data _ _ _)<- ds] []) of
+    kctx = case (runTI $ do { kctx <- kiDataDecs [d | d@(Data _ _ _)<- ds] []
+                            ; u <- getSubst; return (kctx,u) }) of
             Left errMsg -> error errMsg
-            Right kctx -> kctx
+            Right (kctx,u) -> ([(x,uapply u k) | (x,k) <- kctx],u)
 
 tiProg kctx (Prog ds) = (ctx,u)
   where
     (ctx,u) = case (runTI $ do { ctx <- tiDecs kctx ds []
-                               ; u<-getSubst; return (ctx,u)}) of
+                               ; u <- getSubst; return (ctx,u) }) of
                 Left errMsg -> error errMsg
                 Right (ctx,u) -> ([(x,uapply u t) | (x,t) <- ctx],u)
 
@@ -196,10 +197,12 @@ greet (CmdArgs{..}) = do
   h <- maybe (return stdin) (\s -> openFile s ReadMode) argFilePath
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
-  let kctx = kiProg program
+  let (kctx,u) = kiProg program
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
-                $ reverse [show x++" : "++ printTree k | (x,k) <- kctx]
+                $ reverse [ show x++" : "++
+                            printTree(foldr (.) id (map (uncurry subst) u) k)
+                           | (x,k) <- kctx ]
           ; putStrLn ""
           }
   let (ctx,u) = tiProg kctx program
