@@ -36,15 +36,19 @@ type TmName = Name Tm
 
 data Ki = KVar KiName
         | Star
-        | KArr Ki Ki
+        | KArr KArg Ki 
    -- deriving Show
+
+type KArg = Either Ty Ki
 
 data Ty = TVar TyName
         | TCon TyName
         | TArr Ty Ty
-        | TApp Ty Ty
+        | TApp Ty TArg
         | TFix Ty -- Ty must be TCon or application of TCon to other arguments
    -- deriving Show
+
+type TArg = Either Tm Ty
 
 data Tm = Var TmName
         | Con TmName
@@ -58,7 +62,9 @@ data Tm = Var TmName
    -- deriving Show
 
 -- assuming only variable form of indicies in IxMap
-type IxMap = Bind [TyName] Ty
+type IxMap = Bind [TArgName] Ty
+
+type TArgName = Either TmName TyName
 
 $(derive [''Ki, ''Ty, ''Tm])
 

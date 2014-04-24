@@ -37,15 +37,21 @@ token UIdent (upper (letter | digit | '_')* ) ;
 
 KVar.  Kind2 ::= LIdent ;
 KStar. Kind2 ::= "*" ;
-KArr.  Kind1 ::= Kind2 "->" Kind1 ;
+KArr.  Kind1 ::= KArg "->" Kind1 ;
 coercions Kind 2 ;
+
+KArgL. KArg ::= "{" Type "}" ;
+KArgR. KArg ::= Kind2 ;
 
 TVar. Type3 ::= LIdent ;
 TCon. Type3 ::= UIdent ;
 TArr. Type1 ::= Type2 "->" Type1 ;
-TApp. Type2 ::= Type2 Type3 ;
+TApp. Type2 ::= Type2 TArg;
 TFix. Type2 ::= "Mu" Type3 ;
 coercions Type 3 ;
+
+TArgL. TArg ::= "{" Term "}" ;
+TArgR. TArg ::= Type3 ;
 
 Var. Term3 ::= LIdent ;
 Con. Term3 ::= UIdent ;
@@ -64,7 +70,13 @@ coercions Term 3 ;
 Case. Alt ::= UIdent [LIdent] "->" Term ;
 separator Alt ";" ;
 
-Phi. IxMap ::= [LIdent] "." Type ;
+Phi. IxMap ::= [IVar] "." Type ;
+
+IVarR. IVar ::= LIdent ;
+IVarL. IVar ::= "{" LIdent "}" ;
+
+[].  [IVar] ::= ;
+(:). [IVar] ::= IVar [IVar] ;
 
 [].  [LIdent] ::= ;
 (:). [LIdent] ::= LIdent [LIdent] ;
@@ -101,30 +113,29 @@ instance Print Tm where
 
 kind2Ki KStar = S.Star
 kind2Ki (KVar (LIdent s)) = S.KVar (string2Name s)
-kind2Ki (KArr k1 k2) = S.KArr (kind2Ki k1) (kind2Ki k2)
+kind2Ki (KArr (KArgR k1) k2) = S.KArr (Right $ kind2Ki k1) (kind2Ki k2)
+kind2Ki (KArr (KArgL t1) k2) = S.KArr (Left  $ type2Ty t1) (kind2Ki k2)
 
 ki2Kind S.Star = KStar
 ki2Kind (S.KVar nm) = KVar (LIdent $ show nm)
-ki2Kind (S.KArr k1 k2) = KArr (ki2Kind k1) (ki2Kind k2)
+ki2Kind (S.KArr (Right k1) k2) = KArr (KArgR $ ki2Kind k1) (ki2Kind k2)
+ki2Kind (S.KArr (Left  t1) k2) = KArr (KArgL $ ty2Type t1) (ki2Kind k2)
 
 
 type2Ty (TVar (LIdent s)) = S.TVar (string2Name s)
 type2Ty (TCon (UIdent s)) = S.TCon (string2Name s)
 type2Ty (TArr t1 t2) = S.TArr (type2Ty t1) (type2Ty t2)
-type2Ty (TApp t1 t2) = S.TApp (type2Ty t1) (type2Ty t2)
+type2Ty (TApp t1 (TArgR t2)) = S.TApp (type2Ty t1) (Right $ type2Ty t2)
+type2Ty (TApp t1 (TArgL e2)) = S.TApp (type2Ty t1) (Left  $ term2Tm e2)
 type2Ty (TFix t) = S.TFix (type2Ty t)
 
 ty2Type (S.TVar nm) = TVar (LIdent $ show nm)
 ty2Type (S.TCon nm) = TCon (UIdent $ show nm)
 ty2Type (S.TArr t1 t2) = TArr (ty2Type t1) (ty2Type t2)
-ty2Type (S.TApp t1 t2) = TApp (ty2Type t1) (ty2Type t2)
+ty2Type (S.TApp t1 (Right t2)) = TApp (ty2Type t1) (TArgR $ ty2Type t2)
+ty2Type (S.TApp t1 (Left  e2)) = TApp (ty2Type t1) (TArgL $ tm2Term e2)
 ty2Type (S.TFix t) = TFix (ty2Type t)
 
-
-case2SAltItem (Case (UIdent c) xs e) =
-    ( string2Name c, bind [string2Name x | LIdent x <- xs] (term2Tm e) )
-
-phi2SPhi (Phi xs ty) = bind [string2Name s | LIdent s <- xs] (type2Ty ty)
 
 term2Tm (Var (LIdent s)) = S.Var (string2Name s)
 term2Tm (Con (UIdent s)) = S.Con (string2Name s)
@@ -145,10 +156,12 @@ term2Tm (Alt cs) = S.Alt Nothing
         [ (string2Name c, bind [string2Name s | LIdent s <- as] (term2Tm e))
          | Case (UIdent c) as e <- cs ]
 term2Tm (AltAnn (Phi xs ty) cs) =
-  S.Alt (Just $ bind [string2Name s | LIdent s <- xs] (type2Ty ty))
+  S.Alt (Just $ bind (map ident2names xs) (type2Ty ty))
         [ (string2Name c, bind [string2Name s | LIdent s <- as] (term2Tm e))
          | Case (UIdent c) as e <- cs ]
-
+  where
+  ident2names (IVarR (LIdent s)) = Right (string2Name s)
+  ident2names (IVarL (LIdent s)) = Left  (string2Name s)
 
 tm2Term (S.Var nm) = Var (LIdent $ show nm)
 tm2Term (S.Con nm) = Con (UIdent $ show nm)
@@ -174,12 +187,13 @@ tm2Term (S.Alt Nothing cs) =
   Alt [ Case (UIdent c) (map (LIdent . show) as) (tm2Term e)
       | (c,(as,e)) <- map (\(nm,bnd) -> (show nm, unsafeUnbind bnd)) cs ]
 tm2Term (S.Alt (Just phi) cs) =
-  AltAnn (Phi (map (LIdent . show) nms) (ty2Type ty))
+  AltAnn (Phi (map names2ident nms) (ty2Type ty))
       [ Case (UIdent c) (map (LIdent . show) as) (tm2Term e)
       | (c,(as,e)) <- map (\(nm,bnd) -> (show nm, unsafeUnbind bnd)) cs ]
   where
   (nms,ty) = unsafeUnbind phi
-
+  names2ident (Right nm) = IVarR (LIdent $ show nm)
+  names2ident (Left  nm) = IVarL (LIdent $ show nm)
 
 hTokens h = tokens <$> hGetContents h
 
@@ -198,7 +212,13 @@ instance Alpha Tm where
 instance Subst Ki Ki where
   isvar (S.KVar x) = Just (SubstName x)
   isvar _ = Nothing
+instance Subst Ki Ty where
+instance Subst Ki Tm where
 instance Subst Ty Ki where
+instance Subst Ty Ty where
+  isvar (S.TVar x) = Just (SubstName x)
+  isvar (S.TCon x) = Just (SubstName x)
+  isvar _ = Nothing
 instance Subst Ty Tm where
 instance Subst Tm Ki where
 instance Subst Tm Ty where
@@ -206,9 +226,5 @@ instance Subst Tm Tm where
   isvar (S.Var x) = Just (SubstName x)
   isvar (S.Con x) = Just (SubstName x)
   isvar _  = Nothing
-instance Subst Ty Ty where
-  isvar (S.TVar x) = Just (SubstName x)
-  isvar (S.TCon x) = Just (SubstName x)
-  isvar _ = Nothing
 
 

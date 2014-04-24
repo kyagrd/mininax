@@ -58,6 +58,13 @@ instance HasVar TyName Ty where
   is_var _ = Nothing
   var = TVar
 
+instance HasVar TmName Tm where
+  is_var (Var nm) = Just nm
+  is_var _ = Nothing
+  var = Var
+
+
+
 -- do not break down names for unification
 instance (Eq n, Show n, HasVar n Ki) => Unify n Ki (Name s) where
    unifyStep _ = unifyStepEq
@@ -80,14 +87,12 @@ instance (Eq n, Show n, HasVar n Ty) => Unify n Ty String where
 uapply s = foldr (.) id (map (uncurry subst) s)
 
 mgu t1 t2 = do
-  -- s <- getSubst
   case solveUnification [(t1, t2)] of
     Left e  -> throwError (strMsg $ e ++ "\n\t"++ errstr)
     Right u -> return u
   where errstr = "cannot unify "++printTree t1++" and "++printTree t2
 
 mguMany ps = do
-  -- s <- getSubst
   case solveUnification ps of
     Left e  -> throwError (strMsg $ e ++ "\n\t" ++ errstr)
     Right u -> return u
@@ -115,42 +120,52 @@ type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
 
 
 ki :: KCtx -> Ty -> KI Ki
-ki ctx (TVar x)  = case lookup x ctx of
-                     Nothing -> throwError(strMsg $ name2String x++" undefined")
-                     Just k -> return k -- currently just simple kinds
-ki ctx (TCon x)  = case lookup x ctx of
-                     Nothing -> throwError(strMsg $ name2String x++" undefined")
-                     Just k -> return k -- currently just simple kinds
-ki ctx (TArr t1 t2) =
-                  do k1 <- ki ctx t1
-                     k2 <- ki ctx t2
-                     lift $ unify Star k1
-                     lift $ unify Star k2
-                     return Star
-ki ctx (TApp t1 t2) =
-                  do k1 <- ki ctx t1
-                     k2 <- ki ctx t2
-                     k <- KVar <$> fresh "k"
-                     lift $ unify (KArr k2 k) k1
-                     return k
-
-ki ctx (TFix t) = do k1 <- ki ctx t
-                     k <- KVar <$> fresh "k"
-                     lift $ unify (KArr k k) k1
-                     return k
+ki kctx (TVar x) =
+  case lookup x kctx of
+    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Just k -> return k -- currently just simple kinds
+ki kctx (TCon x) =
+  case lookup x kctx of
+    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Just k -> return k -- currently just simple kinds
+ki kctx (TArr t1 t2) =
+  do k1 <- ki kctx t1
+     k2 <- ki kctx t2
+     lift $ unify Star k1
+     lift $ unify Star k2
+     return Star
+ki kctx (TApp t1 (Right t2)) =
+  do k1 <- ki kctx t1
+     k2 <- ki kctx t2
+     k <- KVar <$> fresh "k"
+     lift $ unify (KArr (Right k2) k) k1
+     return k
+ki kctx (TApp t1 (Left e2)) =
+  do k1 <- ki kctx t1
+     t2 <- case runTI (ti kctx [] e2) of
+             Left s -> throwError s
+             Right t -> return t
+     k <- KVar <$> fresh "k"
+     lift $ unify (KArr (Left t2) k) k1
+     return k
+ki kctx (TFix t) =
+  do k1 <- ki kctx t
+     k <- KVar <$> fresh "k"
+     lift $ unify (KArr (Right k) k) k1
+     return k
 
 
 freshInst tysch = liftM snd (unbind tysch)
 
 closeTy :: KCtx -> Ctx -> Ty -> TySch
-closeTy kctx ctx ty = bind (nub((fv ty \\ fv ctx) \\ fv kctx)) ty
-
-
+closeTy kctx ctx ty = bind (nub((fv' ty \\ fv' ctx) \\ fv' kctx)) ty
+  where
+  fv' x = map Right (fv x :: [TyName]) ++ map Left (fv x :: [TmName])
 
 type Ctx = [(TmName,TySch)]
 type TI = FreshMT (ErrorT UnifyError (State (UnificationState TyName Ty)))
 
-type TySch = Bind [TyName] Ty
+type TySch = Bind [Either TmName TyName] Ty
 
 
 kargs = unfoldr (\k -> case k of { KArr k1 k2 -> Just(k1,k2) ; _ -> Nothing })
@@ -181,13 +196,14 @@ ti kctx ctx (Con x) =
   case lookup x ctx of
     Nothing -> throwError(strMsg $ name2String x++" undefined")
     Just tysch -> return =<< freshInst tysch
+-- TODO term index
 ti kctx ctx (In n t) -- this is a hacky implementation without checking kinds
-  | n < 0     = error "In[n] should have non-negative n"
+  | n < 0     = error "In n should have non-negative n"
   | otherwise = do ty <- ti kctx ctx t
                    let m = fromInteger n
-                   is <- sequence $ replicate m (TVar <$> fresh "i")
+                   is <- sequence $ replicate m (Right . TVar <$> fresh "i")
                    ty1 <- TVar <$> fresh "t"
-                   lift $ unify (foldl TApp ty1 (TFix ty1 : is)) ty
+                   lift $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
                    return $ foldl TApp (TFix ty1) is
 ti kctx ctx (MIt b) =
   do (f,tm@(Alt mphi as)) <- unbind b
@@ -195,31 +211,32 @@ ti kctx ctx (MIt b) =
      t <- fresh "t"
      (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (TVar <$> fresh "b")
                                  Just phi -> unbind phi
-     let tyf = foldl1 TApp (TCon r : map TVar is) `TArr` tyret
-     let tytm = foldl1 TApp (TVar t : TCon r : map TVar is) `TArr` tyret
+     let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
+     let tytm = foldl TApp (TVar t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      let kctx' = (r, undefined {- TODO this is hack -}) : kctx
      let ctx' = (f,bind is tyf) : ctx
      tytm' <- ti kctx' ctx' tm
      lift $ unify tytm tytm'
-     return $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
-
+     return $ foldl TApp (TFix(TVar t)) (map eitherVar is) `TArr` tyret
+   where
+   eitherVar = either (Left . Var) (Right . TVar)
 ti kctx ctx (MPr b) =
   do ((f,cast),tm@(Alt mphi as)) <- unbind b
      r <- fresh "r"
      t <- fresh "t"
      (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (TVar <$> fresh "b")
                                  Just phi -> unbind phi
-     let tyf    = foldl1 TApp (TCon r : map TVar is) `TArr` tyret
-     let tycast = foldl1 TApp (TCon r : map TVar is) `TArr`
-                  foldr1 TApp (TFix (TVar t) : map TVar is)
-     let tytm   = foldl1 TApp (TVar t : TCon r : map TVar is) `TArr` tyret
+     let tyf    = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
+     let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
+                  foldl TApp (TFix (TVar t)) (map eitherVar is)
+     let tytm   = foldl TApp (TVar t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      let kctx' = (r, undefined {- TODO this is hack -}) : kctx
      let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
      tytm' <- ti kctx' ctx' tm
      lift $ unify tytm tytm'
-     return $ foldl TApp (TFix(TVar t)) (map TVar is) `TArr` tyret
-
-
+     return $ foldl TApp (TFix(TVar t)) (map eitherVar is) `TArr` tyret
+   where
+   eitherVar = either (Left . Var) (Right . TVar)
 ti kctx ctx (Lam b) =
   do (x, t) <- unbind b
      ty1 <- TVar <$> fresh "a"
@@ -245,22 +262,23 @@ ti kctx ctx (Alt Nothing as) =
      return (head tys)
 ti kctx ctx (Alt (Just im) as) =
   do tys <- mapM (tiAlt kctx ctx) as
-     let (tcon : args) = tApp2list $ case (head tys) of TArr t _ -> t
+     let (Right tcon : args) = tApp2list $ case (head tys) of TArr t _ -> t
      (is, rngty) <- unbind im
      when (length is > length args)
         $ throwError(strMsg $ "too many indices in "++show im)
-     let args' = replaceSuffix args (map TVar is)
-     let domty = foldl1 TApp (tcon : args')
+     let args' = replaceSuffix args (map eitherVar is)
+     let domty = foldl TApp tcon args'
      let tysch = bind is (TArr domty rngty)
      tys' <- mapM freshInst (replicate (length as) tysch)
      lift $ unifyMany (zip tys' tys)
      return =<< freshInst tysch
-
+   where
+   eitherVar = either (Left . Var) (Right . TVar)
 
 replaceSuffix xs ys = reverse (drop (length ys) (reverse xs)) ++ ys
 
-tApp2list (TApp ty1 ty2) = tApp2list ty1 ++ [ty2]
-tApp2list ty             = [ty]
+tApp2list (TApp ty1 targ) = tApp2list ty1 ++ [targ]
+tApp2list ty             = [Right ty]
 
 app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]

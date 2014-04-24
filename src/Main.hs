@@ -226,6 +226,7 @@ mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
 
 
 
+
 -- Entry point for unit tests.
 testMain = do
     allPass <- $quickCheckAll -- Run QuickCheck on all prop_ functions
