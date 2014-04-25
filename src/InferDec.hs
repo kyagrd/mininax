@@ -55,12 +55,12 @@ tiDec kctx (Data (UIdent tc) is dAlts) ctx =
   do return $ [ (string2Name c, closeTy kctx ctx (foldr TArr retTy $ map type2Ty ts))
                | DAlt (UIdent c) ts <- dAlts ] ++ ctx
   where retTy = foldl TApp (TCon(string2Name tc)) 
-                           [Right $ TVar(string2Name a) | LIdent a <- is]
+                           [Right $ Var(string2Name a) | LIdent a <- is]
 
 kiData :: Dec -> KCtx -> KI KCtx
 kiData (Data (UIdent tc) is dAlts) kctx =
   do ctx <- sequence [ (,) (string2Name a :: TyName)
-                       <$> (KVar <$> fresh "k")    | LIdent a <- is ]
+                       <$> (Var <$> fresh "k")    | LIdent a <- is ]
      mapM (kiDAlt $ ctx ++ kctx) dAlts
      return $ (string2Name tc, foldr kArr Star (map snd ctx)) : kctx
   where

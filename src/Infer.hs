@@ -48,39 +48,14 @@ solveUnification (eqs :: [(a, a)]) =
                                rwConstraints
                     Nothing -> return ()
 
-instance HasVar KiName Ki where
-  is_var (KVar nm) = Just nm
-  is_var _ = Nothing
-  var = KVar
-
-instance HasVar TyName Ty where
-  is_var (TVar nm) = Just nm
-  is_var _ = Nothing
-  var = TVar
-
-instance HasVar TmName Tm where
+instance HasVar (Name PSUT) PSUT where
   is_var (Var nm) = Just nm
   is_var _ = Nothing
   var = Var
 
 
-
--- do not break down names for unification
-instance (Eq n, Show n, HasVar n Ki) => Unify n Ki (Name s) where
+instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Name s) where
    unifyStep _ = unifyStepEq
-
--- do not break down strings for unification
-instance (Eq n, Show n, HasVar n Ki) => Unify n Ki String where
-  unifyStep _ = unifyStepEq
-
--- do not break down names for unification
-instance (Eq n, Show n, HasVar n Ty) => Unify n Ty (Name s) where
-  unifyStep _ = unifyStepEq
-
--- do not break down strings for unification
-instance (Eq n, Show n, HasVar n Ty) => Unify n Ty String where
-  unifyStep _ = unifyStepEq
-
 
 -- Don't know why but sometimes have to manually inline this.
 -- Myabe because of some dictionary passing craziness on subst???
@@ -120,7 +95,7 @@ type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
 
 
 ki :: KCtx -> Ty -> KI Ki
-ki kctx (TVar x) =
+ki kctx (Var x) =
   case lookup x kctx of
     Nothing -> throwError(strMsg $ name2String x++" undefined")
     Just k -> return k -- currently just simple kinds
@@ -137,7 +112,7 @@ ki kctx (TArr t1 t2) =
 ki kctx (TApp t1 (Right t2)) =
   do k1 <- ki kctx t1
      k2 <- ki kctx t2
-     k <- KVar <$> fresh "k"
+     k <- Var <$> fresh "k"
      lift $ unify (KArr (Right k2) k) k1
      return k
 ki kctx (TApp t1 (Left e2)) =
@@ -145,12 +120,12 @@ ki kctx (TApp t1 (Left e2)) =
      t2 <- case runTI (ti kctx [] e2) of
              Left s -> throwError s
              Right t -> return t
-     k <- KVar <$> fresh "k"
+     k <- Var <$> fresh "k"
      lift $ unify (KArr (Left t2) k) k1
      return k
 ki kctx (TFix t) =
   do k1 <- ki kctx t
-     k <- KVar <$> fresh "k"
+     k <- Var <$> fresh "k"
      lift $ unify (KArr (Right k) k) k1
      return k
 
@@ -201,51 +176,51 @@ ti kctx ctx (In n t) -- this is a hacky implementation without checking kinds
   | n < 0     = error "In n should have non-negative n"
   | otherwise = do ty <- ti kctx ctx t
                    let m = fromInteger n
-                   is <- sequence $ replicate m (Right . TVar <$> fresh "i")
-                   ty1 <- TVar <$> fresh "t"
+                   is <- sequence $ replicate m (Right . Var <$> fresh "i")
+                   ty1 <- Var <$> fresh "t"
                    lift $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
                    return $ foldl TApp (TFix ty1) is
 ti kctx ctx (MIt b) =
   do (f,tm@(Alt mphi as)) <- unbind b
      r <- fresh "r"
      t <- fresh "t"
-     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (TVar <$> fresh "b")
+     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (Var <$> fresh "b")
                                  Just phi -> unbind phi
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
-     let tytm = foldl TApp (TVar t) (Right (TCon r) : map eitherVar is) `TArr` tyret
+     let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      let kctx' = (r, undefined {- TODO this is hack -}) : kctx
      let ctx' = (f,bind is tyf) : ctx
      tytm' <- ti kctx' ctx' tm
      lift $ unify tytm tytm'
-     return $ foldl TApp (TFix(TVar t)) (map eitherVar is) `TArr` tyret
+     return $ foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
    where
-   eitherVar = either (Left . Var) (Right . TVar)
+   eitherVar = either (Left . Var) (Right . Var)
 ti kctx ctx (MPr b) =
   do ((f,cast),tm@(Alt mphi as)) <- unbind b
      r <- fresh "r"
      t <- fresh "t"
-     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (TVar <$> fresh "b")
+     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (Var <$> fresh "b")
                                  Just phi -> unbind phi
      let tyf    = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
-                  foldl TApp (TFix (TVar t)) (map eitherVar is)
-     let tytm   = foldl TApp (TVar t) (Right (TCon r) : map eitherVar is) `TArr` tyret
+                  foldl TApp (TFix (Var t)) (map eitherVar is)
+     let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      let kctx' = (r, undefined {- TODO this is hack -}) : kctx
      let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
      tytm' <- ti kctx' ctx' tm
      lift $ unify tytm tytm'
-     return $ foldl TApp (TFix(TVar t)) (map eitherVar is) `TArr` tyret
+     return $ foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
    where
-   eitherVar = either (Left . Var) (Right . TVar)
+   eitherVar = either (Left . Var) (Right . Var)
 ti kctx ctx (Lam b) =
   do (x, t) <- unbind b
-     ty1 <- TVar <$> fresh "a"
+     ty1 <- Var <$> fresh "a"
      ty2 <- ti kctx ((x, bind [] ty1) : ctx) t
      return (TArr ty1 ty2)
 ti kctx ctx (App t1 t2) =
   do ty1 <- ti kctx ctx t1
      ty2 <- ti kctx ctx t2
-     ty <- TVar <$> fresh "a"
+     ty <- Var <$> fresh "a"
      lift $ unify (TArr ty2 ty) ty1
      return ty
 ti kctx ctx (Let b) =
@@ -273,7 +248,7 @@ ti kctx ctx (Alt (Just im) as) =
      lift $ unifyMany (zip tys' tys)
      return =<< freshInst tysch
    where
-   eitherVar = either (Left . Var) (Right . TVar)
+   eitherVar = either (Left . Var) (Right . Var)
 
 replaceSuffix xs ys = reverse (drop (length ys) (reverse xs)) ++ ys
 
@@ -288,7 +263,7 @@ app2list t           = [t]
 -- not considering existentials or generic existentials yet
 tiAlt kctx ctx (x,b) =
   do (ns,t) <- unbind b
-     tyvars <- sequence $ replicate (length ns) (bind [] <$> TVar <$> fresh "a")
+     tyvars <- sequence $ replicate (length ns) (bind [] <$> Var <$> fresh "a")
      let ctx' = zip ns tyvars ++ ctx
      domty <- ti kctx ctx' (foldl1 App (Con x : map Var ns))
      rngty <- ti kctx ctx' t

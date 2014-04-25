@@ -24,7 +24,7 @@ module Parser where
 import Language.LBNF
 import Unbound.LocallyNameless hiding (Con, Data)
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
-import Syntax (Ki, Ty, Tm)
+import Syntax (Ki, Ty, Tm, PSUT, isKi, isTy, isTm)
 import qualified Syntax as S
 import Control.Applicative
 import System.IO
@@ -40,7 +40,7 @@ KStar. Kind2 ::= "*" ;
 KArr.  Kind1 ::= KArg "->" Kind1 ;
 coercions Kind 2 ;
 
-KArgL. KArg ::= "{" Type "}" ;
+KArgL. KArg ::= "`{" Type "`}" ;
 KArgR. KArg ::= Kind2 ;
 
 TVar. Type3 ::= LIdent ;
@@ -50,7 +50,7 @@ TApp. Type2 ::= Type2 TArg;
 TFix. Type2 ::= "Mu" Type3 ;
 coercions Type 3 ;
 
-TArgL. TArg ::= "{" Term "}" ;
+TArgL. TArg ::= "`{" Term "`}" ;
 TArgR. TArg ::= Type3 ;
 
 Var. Term3 ::= LIdent ;
@@ -73,7 +73,7 @@ separator Alt ";" ;
 Phi. IxMap ::= [IVar] "." Type ;
 
 IVarR. IVar ::= LIdent ;
-IVarL. IVar ::= "{" LIdent "}" ;
+IVarL. IVar ::= "`{" LIdent "`}" ;
 
 [].  [IVar] ::= ;
 (:). [IVar] ::= IVar [IVar] ;
@@ -97,39 +97,50 @@ comment "--" ;
 comment "{-" "-}"
 |]
 
-instance Print Ki where
-  prt n = prt n . ki2Kind
-  prtList = prtList . map ki2Kind
 
-instance Print Ty where
-  prt n = prt n . ty2Type
-  prtList = prtList . map ty2Type
+instance Print S.PSUT where
+  prt n x | isKi x = prt n (ki2Kind x)
+          | isTy x = prt n (ty2Type x)
+          | isTm x = prt n (tm2Term x)
+  prtList xs@(x:_)
+          | isKi x = prtList (map ki2Kind xs)
+          | isTy x = prtList (map ty2Type xs)
+          | isTm x = prtList (map tm2Term xs)
+  prtList []       = prtList ([]::[Integer])
 
-instance Print Tm where
-  prt n = prt n . tm2Term
-  prtList = prtList . map tm2Term
+-- instance Print Ki where
+--   prt n = prt n . ki2Kind
+--   prtList = prtList . map ki2Kind
+-- 
+-- instance Print Ty where
+--   prt n = prt n . ty2Type
+--   prtList = prtList . map ty2Type
+-- 
+-- instance Print Tm where
+--   prt n = prt n . tm2Term
+--   prtList = prtList . map tm2Term
 
 -- Translating between BNFC syntax and Unbound syntax
 
 kind2Ki KStar = S.Star
-kind2Ki (KVar (LIdent s)) = S.KVar (string2Name s)
+kind2Ki (KVar (LIdent s)) = S.Var (string2Name s)
 kind2Ki (KArr (KArgR k1) k2) = S.KArr (Right $ kind2Ki k1) (kind2Ki k2)
 kind2Ki (KArr (KArgL t1) k2) = S.KArr (Left  $ type2Ty t1) (kind2Ki k2)
 
 ki2Kind S.Star = KStar
-ki2Kind (S.KVar nm) = KVar (LIdent $ show nm)
+ki2Kind (S.Var nm) = KVar (LIdent $ show nm)
 ki2Kind (S.KArr (Right k1) k2) = KArr (KArgR $ ki2Kind k1) (ki2Kind k2)
 ki2Kind (S.KArr (Left  t1) k2) = KArr (KArgL $ ty2Type t1) (ki2Kind k2)
 
 
-type2Ty (TVar (LIdent s)) = S.TVar (string2Name s)
+type2Ty (TVar (LIdent s)) = S.Var (string2Name s)
 type2Ty (TCon (UIdent s)) = S.TCon (string2Name s)
 type2Ty (TArr t1 t2) = S.TArr (type2Ty t1) (type2Ty t2)
 type2Ty (TApp t1 (TArgR t2)) = S.TApp (type2Ty t1) (Right $ type2Ty t2)
 type2Ty (TApp t1 (TArgL e2)) = S.TApp (type2Ty t1) (Left  $ term2Tm e2)
 type2Ty (TFix t) = S.TFix (type2Ty t)
 
-ty2Type (S.TVar nm) = TVar (LIdent $ show nm)
+ty2Type (S.Var nm) = TVar (LIdent $ show nm)
 ty2Type (S.TCon nm) = TCon (UIdent $ show nm)
 ty2Type (S.TArr t1 t2) = TArr (ty2Type t1) (ty2Type t2)
 ty2Type (S.TApp t1 (Right t2)) = TApp (ty2Type t1) (TArgR $ ty2Type t2)
@@ -201,30 +212,13 @@ hProg h = pProg <$> hTokens h
 
 
 ------------------------------------------------------
-instance Show Ki where show = printTree
-instance Show Ty where show = printTree
-instance Show Tm where show = printTree
+instance Show PSUT where show = printTree
 
-instance Alpha Ki where
-instance Alpha Ty where
-instance Alpha Tm where
+instance Alpha PSUT where
 
-instance Subst Ki Ki where
-  isvar (S.KVar x) = Just (SubstName x)
-  isvar _ = Nothing
-instance Subst Ki Ty where
-instance Subst Ki Tm where
-instance Subst Ty Ki where
-instance Subst Ty Ty where
-  isvar (S.TVar x) = Just (SubstName x)
-  isvar (S.TCon x) = Just (SubstName x)
-  isvar _ = Nothing
-instance Subst Ty Tm where
-instance Subst Tm Ki where
-instance Subst Tm Ty where
-instance Subst Tm Tm where
+instance Subst PSUT PSUT where
   isvar (S.Var x) = Just (SubstName x)
+  isvar (S.TCon x) = Just (SubstName x)
   isvar (S.Con x) = Just (SubstName x)
-  isvar _  = Nothing
-
+  isvar _ = Nothing
 
