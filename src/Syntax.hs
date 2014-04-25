@@ -37,17 +37,17 @@ type TmName = Name Tm
 
 data PSUT
   -- data Ki
-        -- = KVar KiName
+        -- = KVar KiName -- shared with Var
         = Star
         | KArr KArg Ki 
   -- data Ty
-        -- = TVar TyName -- argument must be (V nm)
+        -- = TVar TyName -- shared with Var
         | TCon TyName
         | TArr Ty Ty
         | TApp Ty TArg
         | TFix Ty -- Ty must be TCon or application of TCon to other arguments
   -- data Tm
-        | Var TmName -- argument must be (V nm)
+        | Var TmName
         | Con TmName
         | In Integer Tm
         | MIt (Bind TmName Tm) -- Tm must be Alt
