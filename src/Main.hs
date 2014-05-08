@@ -19,6 +19,11 @@ module Main (
     main
 ) where
 
+import Syntax
+import Infer
+import InferDec
+import Parser
+
 import Control.Monad
 import Control.Applicative
 -- import Control.Monad.Trans
@@ -29,14 +34,10 @@ import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
 import Language.LBNF.Runtime
 -- (printTree)
-import Generics.RepLib.Unify
+import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless (runFreshMT)
 import System.IO
 import Options.Applicative
-import Syntax
-import Infer
-import InferDec
-import Parser
 
 k :: Kind
 k = [kind| * |]
@@ -55,6 +56,10 @@ program =
     data P r a = PN | PC a (r (Pair a a)) ;
     data MM = MM (Mu N);
     data MMM a = MMM (Mu P a);
+    gadt V a r : `{ Mu N `} -> * where
+      { VN : V a r `{ In 0 Z `}
+      ; VC : a -> r `{ n `} -> V a r `{ In 0 (S n) `}
+      } ;
     id = \x -> x ;
     x = id;
     z = {True -> True; False -> False};
@@ -109,13 +114,9 @@ program =
 -- putStrLn $ Language.LBNF.Runtime.printTree d
 
 
-kctx = case (runTI $ kiDataDecs (case program of Prog ds -> [d | d@(Data _ _ _)<- ds]) [])
-         of Right x -> x
-            Left x -> error x
-
-ctx = case (runTI $ tiDecs kctx (case program of Prog ds -> ds) [])
-         of Right x -> x
-            Left x -> error x
+(kctx,ctx) = case (runTI $ tiDecs (case program of Prog ds -> ds) ([],[])) of
+               Right x -> x
+               Left x -> error x
 
 evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds))
           of Right x -> x
@@ -158,19 +159,15 @@ cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag
     <> value Nothing
 
 
-kiProg (Prog ds) = kctx
+tiProg (Prog ds) = (kctx,ictx,u)
   where
-    kctx = case (runTI $ do { kctx <- kiDataDecs [d | d@(Data _ _ _)<- ds] []
-                            ; u <- getSubst; return (kctx,u) }) of
+  (kctx,ictx,u)
+      = case (runTI $ do { (kctx,ictx) <- tiDecs ds ([],[])
+                           ; u <- getSubst; return (kctx,ictx,u) }) of
             Left errMsg -> error errMsg
-            Right (kctx,u) -> ([(x,uapply u k) | (x,k) <- kctx],u)
-
-tiProg kctx (Prog ds) = (ctx,u)
-  where
-    (ctx,u) = case (runTI $ do { ctx <- tiDecs kctx ds []
-                               ; u <- getSubst; return (ctx,u) }) of
-                Left errMsg -> error errMsg
-                Right (ctx,u) -> ([(x,uapply u t) | (x,t) <- ctx],u)
+            Right (kctx,ictx,u) -> ( [(x,uapply u k) | (x,k) <- kctx]
+                                   , [(x,uapply u t) | (x,t) <- ictx]
+                                   , u)
 
 
 
@@ -197,7 +194,7 @@ greet (CmdArgs{..}) = do
   h <- maybe (return stdin) (\s -> openFile s ReadMode) argFilePath
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
-  let (kctx,u) = kiProg program
+  let (kctx,ctx,u) = tiProg program
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
@@ -205,8 +202,7 @@ greet (CmdArgs{..}) = do
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
-  let (ctx,u) = tiProg kctx program
-  -- print ctx
+  -- mapM_ print (reverse ctx)
   when (flagAll || flagTi || (not flagKi && not flagEv))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
@@ -221,14 +217,22 @@ greet (CmdArgs{..}) = do
 
 
 
-mygreet = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
-                         ,argFilePath=Just "../test/test.mininax"}
+mygreet  = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
+                          ,argFilePath=Just "../test/test.mininax"}
 
 mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
-                         ,argFilePath=Just "../test/test.mininax"}
+                          ,argFilePath=Just "../test/test.mininax"}
 
 
+su1,su2,su3,su4 :: Either UnifyError [(TmName,PSUT)]
+su1 = solveUnification [(term2Tm[term|(\x->a)|],term2Tm[term|(\x->x)a|])]
 
+su2 = solveUnification [(term2Tm[term|(\x->a)|],term2Tm[term|(\x->b)|])]
+
+su3 = solveUnification [(term2Tm[term|(\x->a)|],term2Tm[term|(\x->(\x->x)a)|])]
+
+su4 = solveUnification [(type2Ty[type|A `{ (\x->x) `}|]
+                        ,type2Ty[type|A `{ (\x->x)(\x->x) `}|])]
 
 -- Entry point for unit tests.
 testMain = do

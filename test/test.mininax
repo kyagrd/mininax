@@ -9,6 +9,11 @@ data L a r = N | C a r ;
 data P r a = PN | PC a (r (Pair a a)) ;
 data MM = MM (Mu N);
 data MMM a = MMM (Mu P a);
+data T a r `{ i `} = TN | TC a (r `{ In 0 (S i) `});
+gadt V a r : `{ Mu N `} -> * where
+  { VN : V a r `{ In 0 Z `}
+  ; VC : a -> r `{ n `} -> V a r `{ In 0 (S n) `}
+  } ;
 id = \x -> x ;
 x = id;
 z = {True -> True; False -> False};
@@ -25,6 +30,11 @@ cons = \x -> \xs -> In 0 (C x xs) ;
 -- Use (In 1 ...) for recursive values with one index
 pnil = In 1 PN ;
 pcons = \x -> \xs -> In 1 (PC x xs) ;
+-- to test (In 1 ...) works for term indices
+tnil = In 1 TN ;
+tcons = \x -> \xs -> In 1 (TC x xs) ;
+vnil = In 1 VN ;
+vcons = \x -> \xs -> In 1 (VC x xs) ;
 one = succ zero ;
 two = succ one ;
 three = succ two ;
@@ -57,3 +67,5 @@ n10 = factorial zero ;
 n11 = factorial one ;
 n12 = factorial two ;
 n13 = factorial three ;
+v1 = vcons one vnil ;
+v2 = vcons two v1 ;

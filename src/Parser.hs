@@ -53,17 +53,17 @@ coercions Type 3 ;
 TArgL. TArg ::= "`{" Term "`}" ;
 TArgR. TArg ::= Type3 ;
 
-Var. Term3 ::= LIdent ;
-Con. Term3 ::= UIdent ;
-In . Term2 ::= "In" Integer Term2 ;
-MIt . Term2 ::= "mit" LIdent "{" [Alt] "}" ;
-MItAnn . Term2 ::= "mit" LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
-MPr . Term2 ::= "mpr" LIdent LIdent "{" [Alt] "}" ;
-MPrAnn . Term2 ::= "mpr" LIdent LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
-Lam. Term1 ::= "\\" LIdent "->" Term1 ;
-App. Term2 ::= Term2 Term3 ;
-Let. Term1 ::= "let" LIdent "=" Term1 "in" Term1 ;
-Alt. Term3 ::= "{" [Alt] "}" ;
+Var.    Term3 ::= LIdent ;
+Con.    Term3 ::= UIdent ;
+In .    Term2 ::= "In" Integer Term3 ;
+MIt.    Term2 ::= "mit" LIdent "{" [Alt] "}" ;
+MItAnn. Term2 ::= "mit" LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
+MPr.    Term2 ::= "mpr" LIdent LIdent "{" [Alt] "}" ;
+MPrAnn. Term2 ::= "mpr" LIdent LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
+Lam.    Term1 ::= "\\" LIdent "->" Term1 ;
+App.    Term2 ::= Term2 Term3 ;
+Let.    Term1 ::= "let" LIdent "=" Term1 "in" Term1 ;
+Alt.    Term3 ::= "{" [Alt] "}" ;
 AltAnn. Term3 ::= "{{" IxMap "}}" "{" [Alt] "}" ;
 coercions Term 3 ;
 
@@ -84,9 +84,13 @@ IVarL. IVar ::= "`{" LIdent "`}" ;
 [].  [Type3] ::= ;
 (:). [Type3] ::= Type3 [Type3] ;
 
-Data. Dec ::= "data" UIdent [LIdent] "=" [DataAlt] ;
+Gadt. Dec ::= "gadt" UIdent [IVar] ":" Kind "where" "{" [GadtAlt] "}" ;
+Data. Dec ::= "data" UIdent [IVar] "=" [DataAlt] ;
 Def.  Dec ::= LIdent "=" Term ;
 separator Dec ";" ;
+
+GAlt. GadtAlt ::= UIdent ":" Type ;
+separator GadtAlt ";";
 
 DAlt. DataAlt ::= UIdent [Type3] ;
 separator DataAlt "|";
@@ -218,7 +222,7 @@ instance Alpha PSUT where
 
 instance Subst PSUT PSUT where
   isvar (S.Var x) = Just (SubstName x)
-  isvar (S.TCon x) = Just (SubstName x)
-  isvar (S.Con x) = Just (SubstName x)
+  -- isvar (S.TCon x) = Just (SubstName x)
+  -- isvar (S.Con x) = Just (SubstName x)
   isvar _ = Nothing
 
