@@ -14,6 +14,14 @@ gadt V a r : `{ Mu N `} -> * where
   { VN : V a r `{ In 0 Z `}
   ; VC : a -> r `{ n `} -> V a r `{ In 0 (S n) `}
   } ;
+gadt XX a : * where
+  { D1 : a -> XX a
+  ; D2 : (b -> a) -> b -> XX a
+  } ;
+gadt YY : * -> * where
+  { DD1 : Mu N -> YY (Mu N)
+  ; DD3 : (b -> a) -> b -> YY a
+  } ;
 id = \x -> x ;
 x = id;
 z = {True -> True; False -> False};
@@ -38,10 +46,17 @@ vcons = \x -> \xs -> In 1 (VC x xs) ;
 one = succ zero ;
 two = succ one ;
 three = succ two ;
+-- pppp = mit add { S n -> n } ; -- must fail
 z5 = cons nil nil ;
 z6 = cons True nil ;
 z7 = pcons True (pcons (Pair False True) pnil) ;
 z8 = pcons one (pcons (Pair two three) pnil) ;
+z9 = { D1 n   -> succ n
+     ; D2 f x -> f x
+     } ;
+-- z10 = { D1 n   -> succ n
+--       ; D2 f x -> x -- must fail
+--       } ;
 flip = \f -> \x -> \y -> f y x ;
 plus = mit add { Z   -> \m -> m
                ; S n -> \m -> succ (add n m) } ;
@@ -57,6 +72,11 @@ mult = mit mul { Z   -> \m -> zero
 factorial = mpr fac cast { Z   -> one
                          ; S n -> mult (succ (cast n)) (fac n)
                          } ;
+vlength = mit len {{ `{n`} . Mu N }} { VN -> zero ; VC x xs -> succ (len xs) } ;
+vmap = \f -> mit map {{ `{n`} . Mu (V b) `{n`} }}
+                 { VN -> vnil
+                 ; VC x xs -> vcons (f x) (map xs)
+                 } ;
 n4 = plus (plus one one) (plus one one) ;
 n5 = length z6 ;
 n6 = length z5 ;

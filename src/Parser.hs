@@ -32,7 +32,7 @@ import System.IO
 bnfc [lbnf|
 antiquote "[" ":" ":]" ;
 
-token LIdent (lower (letter | digit | '_')* ) ;
+token LIdent ((lower | '_') (letter | digit | '_')* ) ;
 token UIdent (upper (letter | digit | '_')* ) ;
 
 KVar.  Kind2 ::= LIdent ;

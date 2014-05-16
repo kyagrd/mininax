@@ -49,15 +49,15 @@ instance ( Alpha n, Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Bind n PSUT) w
                          do { (_,e1) <- unbind b1
                             ; (_,e2) <- unbind b2
                             ; return (e1,e2) }
-              trace ("trace in instance Unify n a (Bind n a): "
-                     ++ show (e1,e2)) $ unifyStep undefined e1 e2
+              -- trace ("trace in instance Unify n a (Bind n a): " ++ show (e1,e2)) $
+              unifyStep undefined e1 e2
 
 instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
    unifyStep (dum :: Proxy(n,PSUT)) t1 t2 | isTm t1 && isTm t2 =
     do a1 <- runFreshMT (norm [] t1)
        a2 <- runFreshMT (norm [] t2)
-       trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-        case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+       -- trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
             (Just n1, Just n2) ->  if n1 == n2
                                      then return ()
                                      else addSub n1 (var n2);
@@ -67,8 +67,8 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
        where
        addSub n t = extendSubstitution (n, t)
    unifyStep (dum :: Proxy(n,PSUT)) a1 a2 =
-      trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+      -- trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+      case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
            (Just n1, Just n2) ->  if n1 == n2
                                     then return ()
                                     else addSub n1 (var n2);
@@ -140,11 +140,11 @@ type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
 ki :: KCtx -> Ctx -> Ty -> KI Ki
 ki kctx ictx (Var x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Nothing -> throwError(strMsg $ "ty var "++name2String x++" undefined")
     Just k -> return k -- currently just simple kinds
 ki kctx ictx (TCon x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Nothing -> throwError(strMsg $ "ty con "++name2String x++" undefined")
     Just k -> return k -- currently just simple kinds
 ki kctx ictx (TArr t1 t2) =
   do k1 <- ki kctx ictx t1
@@ -252,7 +252,7 @@ ti kctx ictx ctx e@(In n t) -- this is a hacky implementation without checking k
            return $ foldl TApp (TFix ty1) is
 ti kctx ictx ctx (MIt b) =
   do (f,tm@(Alt mphi as)) <- unbind b
-     r <- fresh "r"
+     r <- fresh "_r"
      t <- fresh "t"
      (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (Var <$> fresh "b")
                                  Just phi -> unbind phi
@@ -263,12 +263,18 @@ ti kctx ictx ctx (MIt b) =
      let ctx' = (f,bind is tyf) : ctx
      tytm' <- ti kctx' ictx ctx' tm
      lift $ unify tytm tytm'
-     return $ foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
+     u <- getSubst
+     let ty = foldr (.) id (map (uncurry subst) u) $
+               foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
+     when (r `elem` fv ty) (throwError . strMsg $
+             "abstract type variable "++show r++" cannot escape in type "++
+             show ty ++" of "++show(MIt b) )
+     return ty
    where
    eitherVar = either (Left . Var) (Right . Var)
 ti kctx ictx ctx (MPr b) =
   do ((f,cast),tm@(Alt mphi as)) <- unbind b
-     r <- fresh "r"
+     r <- fresh "_r"
      t <- fresh "t"
      k <- fresh "k"
      (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (Var <$> fresh "b")
@@ -281,12 +287,18 @@ ti kctx ictx ctx (MPr b) =
      let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
      tytm' <- ti kctx' ictx ctx' tm
      lift $ unify tytm tytm'
-     return $ foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
+     u <- getSubst
+     let ty = foldr (.) id (map (uncurry subst) u) $
+               foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
+     when (r `elem` fv ty) (throwError . strMsg $
+             "abstract type variable "++show r++" cannot escape in type "++
+             show ty ++" of "++show(MPr b) )
+     return ty
    where
    eitherVar = either (Left . Var) (Right . Var)
 ti kctx ictx ctx (Lam b) =
   do (x, t) <- unbind b
-     ty1 <- Var <$> fresh "a"
+     ty1 <- Var <$> fresh "_"
      ty2 <- ti kctx ictx ((x, bind [] ty1) : ctx) t
      return (TArr ty1 ty2)
 ti kctx ictx ctx (App t1 t2) =
@@ -302,15 +314,18 @@ ti kctx ictx ctx (Let b) =
      tysch <- closeTy kctx ctx (foldr (.) id (map (uncurry subst) u) ty)
      ti kctx ictx ((x, tysch) : ctx) t2
 ti kctx ictx ctx (Alt _ []) = throwError(strMsg "empty Alts")
-ti kctx ictx ctx (Alt Nothing as) =
+ti kctx ictx ctx (Alt Nothing as) = -- TODO coverage of all ctors
   do tys <- mapM (tiAlt kctx ictx ctx) as
      lift $ unifyMany (zip tys (tail tys))
      return (head tys)
-ti kctx ictx ctx (Alt (Just im) as) =
+ti kctx ictx ctx (Alt (Just im) as) = -- TODO coverage of all ctors
   do tys <- mapM (tiAlt kctx ictx ctx) as
-     let (Right tcon : args) = tApp2list $ case (head tys) of TArr t _ -> t
+     u <- getSubst
+     let (Right tcon : args) =
+            tApp2list $ case (head tys) of
+                          TArr t _ -> foldr (.) id (map (uncurry subst) u) t
      (is, rngty) <- unbind im
-     when (length is > length args)
+     when (1 + length is > length args)
         $ throwError(strMsg $ "too many indices in "++show im)
      let args' = replaceSuffix args (map eitherVar is)
      let domty = foldl TApp tcon args'
@@ -331,14 +346,56 @@ app2list t           = [t]
 
 
 
--- not considering existentials or generic existentials yet
 tiAlt kctx ictx ctx (x,b) =
-  do (ns,t) <- unbind b
-     tyvars <- sequence $ replicate (length ns) (bind [] <$> Var <$> fresh "a")
-     let ctx' = zip ns tyvars ++ ctx
-     domty <- ti kctx ictx ctx' (foldl1 App (Con x : map Var ns))
-     rngty <- ti kctx ictx ctx' t
-     return (TArr domty rngty)
+  do xTy <- case lookup x ictx of
+                 Nothing -> throwError . strMsg $ show x ++ " undefined"
+                 Just xt -> freshInst xt
+     u <- getSubst
+     let xty = foldr (.) id (map (uncurry subst) u) xTy
+     let xtyUnfold = unfoldTArr xty
+     let (xtyArgs, xtyRet) = (init xtyUnfold, last xtyUnfold)
+     let xTyVars = nub $ (fv xty \\ fvTmInTy xty)
+                      \\ (fv kctx ++ fv ictx ++ fv ctx)
+     let xTmVars = nub $ (fvTmInTy xty \\ fv xtyRet)
+                      \\ (fv kctx ++ fv ictx ++ fv ctx)
+     let eTyVars = xTyVars \\ fv xtyRet
+     let eTmVars = xTmVars \\ fv xtyRet
+     -- substitute existential vars as bogus TCon or Con to avoid unification
+     let xty' = foldr (.) id (  [LN.subst nm (TCon nm) | nm <- eTyVars] 
+                             ++ [LN.subst nm (Con nm)  | nm <- eTmVars] ) xty
+     let xtyArgs' = init (unfoldTArr xty')
+     let kctx' = kctx
+     let ictx' = ictx
+     -- -- adding existental TCon or Con to context seems unnecessary
+     -- kctx' <- (++) <$> sequence [(,) nm <$> (Var <$> fresh "k") | nm <- eTyVars]
+     --               <*> return kctx
+     -- ictx' <- (++) <$> sequence [(,) nm <$> (bind [] . Var <$> fresh "c")
+     --                             | nm <- eTmVars]
+     --               <*> return ictx
+     (ns,t) <- unbind b
+     let ctx' = zip ns (map (bind []) xtyArgs') ++ ctx
+     -- -- code before considering existentials
+     -- tyvars <- sequence $ replicate (length ns) (bind [] <$> Var <$> fresh "a")
+     -- let ctx' = zip ns tyvars ++ ctx
+     domty <- ti kctx' ictx' ctx' (foldl1 App (Con x : map Var ns))
+     rngty <- ti kctx' ictx' ctx' t
+     lift $ unify xtyRet domty
+     u <- getSubst
+     let ty = foldr (.) id (map (uncurry subst) u) (TArr domty rngty)
+     let TArr domty rngty = ty
+     let eRetVars = intersect (eTyVars ++ eTmVars) (fv ty)
+     unless (trace (show ty) $ null eRetVars) (throwError . strMsg $
+                              "rigid variables "++ show eRetVars ++
+                              " in the return type "++ show rngty ++
+                              " of "++ show t)
+     return $ trace
+                ("return type: "++show ty ++ "\n"++
+                 show(eTyVars::[TyName]
+                     ,fv xtyRet::[TyName]
+                     ,eTyVars\\fv xtyRet::[TyName])
+                 ++
+                 "\n\t"++ show eTyVars++" of "++show xtyRet ++ show(fv xtyRet::[TyName])++" in "++show (x,b))
+              ty
 
 _x = "x"
 x = Var _x
@@ -421,14 +478,17 @@ norm ctx v@(Var x) =
     Just v  -> return v
 norm ctx v@(Con x) = return v
 norm ctx (In n t) = In n <$> norm ctx t
-norm ctx v@(MIt b) = return v
-norm ctx v@(MPr b) = return v
-norm ctx v@(Lam b) = return v
+norm ctx (MIt b) = do (xs,t) <- unbind b
+                      MIt <$> (bind xs <$> norm ctx t)
+norm ctx (MPr b) = do (xs,t) <- unbind b
+                      MPr <$> (bind xs <$> norm ctx t)
+norm ctx (Lam b) = do (x, t) <- unbind b
+                      Lam . bind x <$> norm ctx t
 norm ctx (App t1 t2) =
   do v1 <- norm ctx t1
      v2 <- norm ctx t2
      case v1 of
-       Var x -> error $ show x ++ " (free variable): should nnormer happen"
+       Var x -> return $ App v1 v2
        Con _ -> return $ App v1 v2
        In _ _ -> return $ App v1 v2
        App _ _ -> return $ App v1 v2
@@ -455,5 +515,7 @@ norm ctx (Let b) = do ((x, Embed t1), t2) <- unbind b
                       v1 <- norm ctx t1
                       let ctx' = (x,v1) : ctx
                       sreturn [(x,v1)] =<< norm ctx' t2
-norm ctx v@(Alt _ _) = return v
-
+norm ctx (Alt m as) =
+  Alt m <$> sequence [ do (xs,t) <- unbind b
+                          (,) c <$> (bind xs <$> norm ctx t)
+                      | (c,b) <- as ]

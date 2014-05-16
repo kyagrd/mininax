@@ -116,8 +116,8 @@ kiDAlt kctx ictx (DAlt _ ts) =
 
 kiGAlt :: (TyName, Ki) -> [TArg] -> KCtx -> Ctx -> GadtAlt -> KI ()
 kiGAlt (tc,kappa) as kctx ictx (GAlt (UIdent c) t) =
-  do unless (1 + length as < length resTyUnfold)
-            (throwError . strMsg $ "need more args for the result type of "++c)
+  do unless (length as < length resTyUnfold)
+            (throwError . strMsg $ "need more args for "++show resTyUnfold++" the result type of "++c)
      unless (and (zipWith aeq (Right(TCon tc) : as) resTyUnfold))
             (throwError . strMsg $ "result type param args not uniform in "++c)
      kctx' <- (++ kctx) <$> sequence [(,) x <$> freshKi | x <- fvTy]
