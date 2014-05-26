@@ -21,13 +21,15 @@
 
 module Parser where
 
-import Language.LBNF
+import Language.LBNF hiding (render, printTree)
+import Language.LBNF.Runtime (Doc)
 import Unbound.LocallyNameless hiding (Con, Data)
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import Syntax (Ki, Ty, Tm, PSUT, isKi, isTy, isTm)
 import qualified Syntax as S
 import Control.Applicative
 import System.IO
+import Data.Char
 
 bnfc [lbnf|
 antiquote "[" ":" ":]" ;
@@ -40,7 +42,7 @@ KStar. Kind2 ::= "*" ;
 KArr.  Kind1 ::= KArg "->" Kind1 ;
 coercions Kind 2 ;
 
-KArgL. KArg ::= "`{" Type "`}" ;
+KArgL. KArg ::= "{" Type "}" ;
 KArgR. KArg ::= Kind2 ;
 
 TVar. Type3 ::= LIdent ;
@@ -50,7 +52,7 @@ TApp. Type2 ::= Type2 TArg;
 TFix. Type2 ::= "Mu" Type3 ;
 coercions Type 3 ;
 
-TArgL. TArg ::= "`{" Term "`}" ;
+TArgL. TArg ::= "{" Term "}" ;
 TArgR. TArg ::= Type3 ;
 
 Var.    Term3 ::= LIdent ;
@@ -73,7 +75,7 @@ separator Alt ";" ;
 Phi. IxMap ::= [IVar] "." Type ;
 
 IVarR. IVar ::= LIdent ;
-IVarL. IVar ::= "`{" LIdent "`}" ;
+IVarL. IVar ::= "{" LIdent "}" ;
 
 [].  [IVar] ::= ;
 (:). [IVar] ::= IVar [IVar] ;
@@ -84,7 +86,7 @@ IVarL. IVar ::= "`{" LIdent "`}" ;
 [].  [Type3] ::= ;
 (:). [Type3] ::= Type3 [Type3] ;
 
-Gadt. Dec ::= "gadt" UIdent [IVar] ":" Kind "where" "{" [GadtAlt] "}" ;
+Gadt. Dec ::= "data" UIdent [IVar] ":" Kind "where" "{" [GadtAlt] "}" ;
 Data. Dec ::= "data" UIdent [IVar] "=" [DataAlt] ;
 Def.  Dec ::= LIdent "=" Term ;
 separator Dec ";" ;
@@ -214,6 +216,46 @@ hTokens h = tokens <$> hGetContents h
 
 hProg h = pProg <$> hTokens h
 
+
+------------------------------------------------------
+
+-- * Overloaded pretty-printer
+printTree :: Print a => a -> String
+printTree = render . prt 0
+
+render :: Doc -> String
+render d = rend 0 (map ($ "") $ d []) "" where
+  rend i ss = case ss of
+    "["      :ts -> showChar '[' . rend i ts
+    "("      :ts -> showChar '(' . rend i ts
+    "{"      :ts ->
+        let rendDefault = showChar '{' . new (i+1) . rend (i+1) ts
+            (ts1, ts2) = break (=="}") ts
+        in if (null ts2 || elem "{" ts1 || elem ";" ts1) 
+             then rendDefault
+             else case ts2 of
+                    "}":";":ts' -> showChar '{' . rend i ts1 . space "}" .
+                                   showChar ';' . new i . rend i ts'
+                    "}"    :ts' -> showChar '{' . rend i ts1 . showChar '}' .
+                                   rend i ts'
+                    _ -> rendDefault
+    "}" : ";":ts -> new (i-1) . space "}" . showChar ';' . new (i-1) . rend (i-1) ts
+    "}"      :ts -> new (i-1) . showChar '}' . new (i-1) . rend (i-1) ts
+    ";"      :ts -> showChar ';' . new i . rend i ts
+    t  : "," :ts -> showString t . space "," . rend i ts
+    t  : ")" :ts -> showString t . showChar ')' . rend i ts
+    t  : "]" :ts -> showString t . showChar ']' . rend i ts
+    t        :ts -> space t . rend i ts
+    _            -> id
+  new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
+  space t = showString t . (\s -> if null s then "" else (' ':s))
+
+
+concatS :: [ShowS] -> ShowS
+concatS = foldr (.) id
+
+replicateS :: Int -> ShowS -> ShowS
+replicateS n f = concatS (replicate n f)
 
 ------------------------------------------------------
 instance Show PSUT where show = printTree

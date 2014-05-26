@@ -9,16 +9,16 @@ data L a r = N | C a r ;
 data P r a = PN | PC a (r (Pair a a)) ;
 data MM = MM (Mu N);
 data MMM a = MMM (Mu P a);
-data T a r `{ i `} = TN | TC a (r `{ In 0 (S i) `});
-gadt V a r : `{ Mu N `} -> * where
-  { VN : V a r `{ In 0 Z `}
-  ; VC : a -> r `{ n `} -> V a r `{ In 0 (S n) `}
+data T a r {i} = TN | TC a (r { In 0 (S i) });
+data V a r : { Mu N } -> * where
+  { VN : V a r { In 0 Z }
+  ; VC : a -> r { n } -> V a r { In 0 (S n) }
   } ;
-gadt XX a : * where
+data XX a : * where
   { D1 : a -> XX a
   ; D2 : (b -> a) -> b -> XX a
   } ;
-gadt YY : * -> * where
+data YY : * -> * where
   { DD1 : Mu N -> YY (Mu N)
   ; DD3 : (b -> a) -> b -> YY a
   } ;
@@ -72,8 +72,8 @@ mult = mit mul { Z   -> \m -> zero
 factorial = mpr fac cast { Z   -> one
                          ; S n -> mult (succ (cast n)) (fac n)
                          } ;
-vlength = mit len {{ `{n`} . Mu N }} { VN -> zero ; VC x xs -> succ (len xs) } ;
-vmap = \f -> mit map {{ `{n`} . Mu (V b) `{n`} }}
+vlength = mit len {{ {n} . Mu N }} { VN -> zero ; VC x xs -> succ (len xs) } ;
+vmap = \f -> mit map {{ {n} . Mu (V b) {n} }}
                  { VN -> vnil
                  ; VC x xs -> vcons (f x) (map xs)
                  } ;

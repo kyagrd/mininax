@@ -32,7 +32,7 @@ import Control.Monad.Error
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
-import Language.LBNF.Runtime
+import Language.LBNF.Runtime hiding (render, printTree)
 -- (printTree)
 import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless (runFreshMT)
@@ -56,9 +56,9 @@ program =
     data P r a = PN | PC a (r (Pair a a)) ;
     data MM = MM (Mu N);
     data MMM a = MMM (Mu P a);
-    gadt V a r : `{ Mu N `} -> * where
-      { VN : V a r `{ In 0 Z `}
-      ; VC : a -> r `{ n `} -> V a r `{ In 0 (S n) `}
+    data V a r : { Mu N } -> * where
+      { VN : V a r { In 0 Z }
+      ; VC : a -> r { n } -> V a r { In 0 (S n) }
       } ;
     id = \x -> x ;
     x = id;
@@ -231,8 +231,8 @@ su2 = solveUnification [(term2Tm[term|(\x->a)|],term2Tm[term|(\x->b)|])]
 
 su3 = solveUnification [(term2Tm[term|(\x->a)|],term2Tm[term|(\x->(\x->x)a)|])]
 
-su4 = solveUnification [(type2Ty[type|A `{ (\x->x) `}|]
-                        ,type2Ty[type|A `{ (\x->x)(\x->x) `}|])]
+su4 = solveUnification [(type2Ty[type|A { (\x->x) }|]
+                        ,type2Ty[type|A { (\x->x)(\x->x) }|])]
 
 -- Entry point for unit tests.
 testMain = do
