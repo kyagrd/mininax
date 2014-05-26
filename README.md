@@ -2,11 +2,8 @@ mininax
 =======
 
 Implementaton of type inference and evaluator for the Nax programing langauge
-without certain features including term indices and GADTs.
-The features for GADTs include heterogeneous return type indicies
-and exsistential type variables in the types for data constructors.
-These GADT related featurs are excluded in mininax.
-
+without certain features including type synonyms and fixpoint derivation.
+There is no case expression, but we have case function that awaits an argument to scrutinize.
 
 Here is an example miniax code.
 ```haskell
