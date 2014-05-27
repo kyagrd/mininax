@@ -4,24 +4,7 @@ data Bool = False | True ;
 data Maybe a = Nothing | Just a ;
 data Either a b = Left a | Right b ;
 data Pair a b = Pair a b ;
-data N r = Z | S r ;
-data L a r = N | C a r ;
-data P r a = PN | PC a (r (Pair a a)) ;
-data MM = MM (Mu N);
-data MMM a = MMM (Mu P a);
-data T a r {i} = TN | TC a (r { In 0 (S i) });
-data V a r : { Mu N } -> * where
-  { VN : V a r { In 0 Z }
-  ; VC : a -> r { n } -> V a r { In 0 (S n) }
-  } ;
-data XX a : * where
-  { D1 : a -> XX a
-  ; D2 : (b -> a) -> b -> XX a
-  } ;
-data YY : * -> * where
-  { DD1 : Mu N -> YY (Mu N)
-  ; DD3 : (b -> a) -> b -> YY a
-  } ;
+
 id = \x -> x ;
 x = id;
 z = {True -> True; False -> False};
@@ -30,27 +13,58 @@ b = True;
 c = x b;
 p = Pair ;
 z3 = Pair True False;
+
+data N r = Z | S r ;
+-- Use (In 0 ...) for regular recursive values without any index
 zero = In 0 Z ;
 succ = \n -> In 0 (S n) ;
--- Use (In 0 ...) for regular recursive values without any index
-nil = In 0 N ;
-cons = \x -> \xs -> In 0 (C x xs) ;
--- Use (In 1 ...) for recursive values with one index
-pnil = In 1 PN ;
-pcons = \x -> \xs -> In 1 (PC x xs) ;
--- to test (In 1 ...) works for term indices
-tnil = In 1 TN ;
-tcons = \x -> \xs -> In 1 (TC x xs) ;
-vnil = In 1 VN ;
-vcons = \x -> \xs -> In 1 (VC x xs) ;
+
 one = succ zero ;
 two = succ one ;
 three = succ two ;
--- pppp = mit add { S n -> n } ; -- must fail
+
+data L a r = N | C a r ;
+nil = In 0 N ;
+cons = \x -> \xs -> In 0 (C x xs) ;
+
 z5 = cons nil nil ;
 z6 = cons True nil ;
+
+
+data P r a = PN | PC a (r (Pair a a)) ;
+-- Use (In 1 ...) for recursive values with one index
+pnil = In 1 PN ;
+pcons = \x -> \xs -> In 1 (PC x xs) ;
+
 z7 = pcons True (pcons (Pair False True) pnil) ;
 z8 = pcons one (pcons (Pair two three) pnil) ;
+
+
+data T a r {i} = TN | TC a (r { In 0 (S i) });
+-- to test (In 1 ...) works for term indices
+tnil = In 1 TN ;
+tcons = \x -> \xs -> In 1 (TC x xs) ;
+
+data V a r : { Mu N } -> * where
+  { VN : V a r { In 0 Z }
+  ; VC : a -> r { n } -> V a r { In 0 (S n) }
+  } ;
+vnil = In 1 VN ;
+vcons = \x -> \xs -> In 1 (VC x xs) ;
+
+data MM = MM (Mu N);
+data MMM a = MMM (Mu P a);
+data XX a : * where
+  { D1 : a -> XX a
+  ; D2 : (b -> a) -> b -> XX a
+  } ;
+data YY : * -> * where
+  { DD1 : Mu N -> YY (Mu N)
+  ; DD3 : (b -> a) -> b -> YY a
+  } ;
+
+
+-- pppp = mit add { S n -> n } ; -- must fail
 z9 = { D1 n   -> succ n
      ; D2 f x -> f x
      } ;

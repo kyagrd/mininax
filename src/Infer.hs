@@ -459,7 +459,7 @@ ev ctx (App t1 t2) =
        Alt m as ->
          do let (Con c:vs) = app2list v2
             case lookup c as of
-              Nothing -> throwError(strMsg $ name2String c++" undefined")
+              Nothing -> throwError(strMsg $ show c++" undefined")
               Just b  ->
                 do (xs,t) <- unbind b
                    let ctx' = zip xs vs ++ ctx
@@ -492,17 +492,22 @@ norm ctx (App t1 t2) =
        Con _ -> return $ App v1 v2
        In _ _ -> return $ App v1 v2
        App _ _ -> return $ App v1 v2
-       Lam b -> do (x, t) <- unbind b
-                   let ctx' = (x,v2) : ctx
-                   sreturn [(x,v2)] =<< norm ctx' t
-       MIt b -> do (f,t) <- unbind b
-                   let ctx' = (f,v1) : ctx
-                   let In _ v = v2
-                   sreturn [(f,v1)] =<< norm ctx' (App t v)
-       MPr b -> do ((f,cast),t) <- unbind b
-                   let ctx' = (f,v1) : (cast,lam _x x) : ctx
-                   let In _ v = v2
-                   sreturn [(f,v1),(cast,lam _x x)] =<< norm ctx' (App t v)
+       Lam b ->
+         do (x, t) <- unbind b
+            let ctx' = (x,v2) : ctx
+            sreturn [(x,v2)] =<< norm ctx' t
+       MIt b ->
+         do (f,t) <- unbind b
+            let ctx' = (f,v1) : ctx
+            case v2 of
+              In _ v -> sreturn [(f,v1)] =<< norm ctx' (App t v)
+              _      -> return (App v1 v2)
+       MPr b ->
+         do ((f,cast),t) <- unbind b
+            let ctx' = (f,v1) : (cast,lam _x x) : ctx
+            case v2 of
+              In _ v -> sreturn [(f,v1),(cast,lam _x x)] =<< norm ctx' (App t v)
+              _      -> return (App v1 v2)
        Alt m as ->
          do let (Con c:vs) = app2list v2
             case lookup c as of
@@ -519,3 +524,4 @@ norm ctx (Alt m as) =
   Alt m <$> sequence [ do (xs,t) <- unbind b
                           (,) c <$> (bind xs <$> norm ctx t)
                       | (c,b) <- as ]
+

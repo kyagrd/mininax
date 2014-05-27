@@ -129,8 +129,8 @@ kiGAlt (tc,kappa) as kctx ictx (GAlt (UIdent c) t) =
   ty = type2Ty t
   (resTy:ts) = reverse (unfoldTArr ty)
   resTyUnfold = unfoldTApp resTy
-  fvAll = nub (fv ty \\ fv as) \\ (tc : fv kctx ++ fv ictx)
-  fvTm = nub (fvTmInTy ty \\ fv as) \\ (tc : fv kctx ++ fv ictx)
+  fvAll = nub (fv ty \\ fv as) \\ [tc]
+  fvTm = nub (fvTmInTy ty \\ fv as) \\ [tc]
   fvTy = fvAll \\ fvTm
   freshKi = Var <$> fresh "k"
   freshTy = (bind [] . Var <$> fresh "a")
@@ -138,6 +138,7 @@ kiGAlt (tc,kappa) as kctx ictx (GAlt (UIdent c) t) =
 evDecs ctx (Data _ _ _ : ds)       = evDecs ctx ds
 evDecs ctx (Gadt _ _ _ _ : ds)     = evDecs ctx ds
 evDecs ctx (Def (LIdent x) t : ds) = do v <- ev ctx (term2Tm t)
+                                        -- v <- norm ctx (term2Tm t)
                                         evDecs ((string2Name x, v) : ctx) ds
 evDecs ctx []                      = return ctx
 

@@ -236,17 +236,24 @@ render d = rend 0 (map ($ "") $ d []) "" where
              else case ts2 of
                     "}":";":ts' -> showChar '{' . rend i ts1 . space "}" .
                                    showChar ';' . new i . rend i ts'
-                    "}"    :ts' -> showChar '{' . rend i ts1 . showChar '}' .
+                    "}"    :ts' ->
+                               let rend_ts1 = case ts1 of 
+                                                []  -> id 
+                                                [t] -> showString t
+                                                _   -> rend i ts1
+                                in showChar '{' . rend_ts1 . space "}" .
                                    rend i ts'
                     _ -> rendDefault
-    "}" : ";":ts -> new (i-1) . space "}" . showChar ';' . new (i-1) . rend (i-1) ts
+    "}" : ";":ts -> new (i-1) . showChar '}' . showChar ';' . new (i-1) . rend (i-1) ts
     "}"      :ts -> new (i-1) . showChar '}' . new (i-1) . rend (i-1) ts
     ";"      :ts -> showChar ';' . new i . rend i ts
     t  : "," :ts -> showString t . space "," . rend i ts
     t  : ")" :ts@(")":_) -> showString t . showChar ')' . rend i ts
     t  : ")" :ts@("}":_) -> showString t . showChar ')' . rend i ts
+    t  : ")" :[]         -> showString t . showChar ')'
     t  : ")" :ts         -> showString t . space ")" . rend i ts
     t  : "]" :ts -> showString t . showChar ']' . rend i ts
+    t        :[] -> showString t
     t        :ts -> space t . rend i ts
     _            -> id
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
