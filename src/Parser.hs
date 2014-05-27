@@ -243,7 +243,9 @@ render d = rend 0 (map ($ "") $ d []) "" where
     "}"      :ts -> new (i-1) . showChar '}' . new (i-1) . rend (i-1) ts
     ";"      :ts -> showChar ';' . new i . rend i ts
     t  : "," :ts -> showString t . space "," . rend i ts
-    t  : ")" :ts -> showString t . showChar ')' . rend i ts
+    t  : ")" :ts@(")":_) -> showString t . showChar ')' . rend i ts
+    t  : ")" :ts@("}":_) -> showString t . showChar ')' . rend i ts
+    t  : ")" :ts         -> showString t . space ")" . rend i ts
     t  : "]" :ts -> showString t . showChar ']' . rend i ts
     t        :ts -> space t . rend i ts
     _            -> id
