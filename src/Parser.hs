@@ -218,46 +218,6 @@ hTokens h = tokens <$> hGetContents h
 hProg h = pProg <$> hTokens h
 
 
-
-------------------------------------------------------
-con2var xs t@(S.Var _)     = return t
-con2var xs S.Star          = return S.Star
-con2var xs (S.KArr ka k2)  = S.KArr <$> either((Left<$>).c2v)((Right<$>).c2v) ka
-                                    <*> c2v k2
-                                    where c2v = con2var xs
-con2var xs t@(S.TCon x)
-               | elem x xs = return $ S.Var x
-               | otherwise = return t  
-con2var xs (S.TArr t1 t2)  = S.TArr <$> con2var xs t1 <*> con2var xs t2
-con2var xs (S.TApp t1 ta)  = S.TApp <$> c2v t1
-                                    <*> either((Left<$>).c2v)((Right<$>).c2v) ta
-                                    where c2v = con2var xs
-con2var xs (S.TFix t)      = S.TFix <$> con2var xs t
-con2var xs t@(S.Con x)
-               | elem x xs = return $ S.Var x
-               | otherwise = return t
-con2var xs (S.In n t)      = S.In n <$> con2var xs t
-con2var xs (S.MIt b)    = do (f,t) <- unbind b
-                             S.MIt <$> (bind f <$> con2var xs t)
-con2var xs (S.MPr b)    = do (f,t) <- unbind b
-                             S.MPr <$> (bind f <$> con2var xs t)
-con2var xs (S.Lam b)    = do (y,t) <- unbind b
-                             S.Lam <$> (bind y <$> con2var xs t)
-con2var xs (S.App t1 t2)   = S.App <$> con2var xs t1 <*> con2var xs t2
-con2var xs (S.Let b)    = do ((y, Embed t1), t2) <- unbind b
-                             t1' <- con2var xs t1
-                             t2' <- con2var xs t2
-                             S.Let <$> (bind (y, Embed t1') <$> pure t2)
-con2var xs (S.Alt mphi as) =
-  do mphi <- case mphi of Nothing  -> return Nothing
-                          Just phi -> do (is,ty) <- unbind phi
-                                         Just <$> (bind is <$> con2var xs ty)
-     S.Alt mphi
-       <$> sequence [ (,) c <$> do { (ys,t) <- unbind b
-                                   ; bind ys <$> con2var xs t } | (c,b) <- as ]
-                    
-
-
 ------------------------------------------------------
 {-
 -- * Overloaded pretty-printer

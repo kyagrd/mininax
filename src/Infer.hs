@@ -22,14 +22,14 @@ import Control.Monad.Trans
 import Control.Monad.Error
 import Control.Monad.State
 import Language.LBNF.Runtime
-import Parser (ty2Type, con2var)
+import Parser (ty2Type)
 import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless hiding (subst, Con)
 import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
-import Debug.Trace
--- trace _ a = a
+-- import Debug.Trace
+trace _ a = a
 
 instance HasVar (Name PSUT) PSUT where
   is_var (Var nm) = Just nm
