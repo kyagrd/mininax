@@ -2,8 +2,10 @@ mininax
 =======
 
 Implementaton of type inference and evaluator for the Nax programing langauge
-without certain features including type synonyms and fixpoint derivation.
-There is no case expression, but we have case function that awaits an argument to scrutinize.
+without much syntactic suguar including type synonyms and fixpoint derivation.
+There is no case expression, but we have case function that awaits an argument
+to scrutinize. We have not yet implemented rank-1 kind polymorphism for
+top level data declarations.
 
 Here is an example miniax code.
 ```haskell

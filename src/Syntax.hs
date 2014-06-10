@@ -25,7 +25,7 @@ module Syntax ( PSUT(..)
  , TmName, Tm, isTm -- (..)
  , TyName, Ty, isTy -- (..)
  , KiName, Ki, isKi -- (..)
- , KArg, TArg, TArgName
+ , KArg, TArg, TArgName, IxMap
 ) where
 
 import Unbound.LocallyNameless hiding (Con)
@@ -103,4 +103,6 @@ instance Rep a => IsString (Name a) where
 -- Alpha and Sbust instances are in Parser module
 -- in order to avoid mutually recursive module imports
 -- since Show class instantces for Ki, Ty, Tm depends on LBNF functions
+
+
 

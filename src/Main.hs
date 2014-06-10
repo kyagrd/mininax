@@ -32,8 +32,7 @@ import Control.Monad.Error
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
-import Language.LBNF.Runtime hiding (render, printTree)
--- (printTree)
+import Language.LBNF.Runtime
 import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless (runFreshMT)
 import System.IO
@@ -114,11 +113,11 @@ program =
 -- putStrLn $ Language.LBNF.Runtime.printTree d
 
 
-(kctx,ctx) = case (runTI $ tiDecs (case program of Prog ds -> ds) ([],[])) of
-               Right x -> x
-               Left x -> error x
+(kctx,ctx,env) = case runTI $ tiDecs (case program of Prog ds -> ds) ([],[],[])
+                   of Right x -> x
+                      Left x -> error x
 
-evctx = case (runFreshMT $ evDecs [] (case program of Prog ds -> ds))
+evctx = case runFreshMT $ evDecs [] (case program of Prog ds -> ds)
           of Right x -> x
              Left x -> error x
 
@@ -138,8 +137,7 @@ data CmdArgs = CmdArgs
   , argFilePath :: Maybe String
   }
 
-cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag
-                  <*> filepathArg
+cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag <*> filepathArg
   where
   kiFlag = switch
      $ long "kind" <> short 'k'
@@ -162,14 +160,12 @@ cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag
 tiProg (Prog ds) = (kctx,ictx,u)
   where
   (kctx,ictx,u)
-      = case (runTI $ do { (kctx,ictx) <- tiDecs ds ([],[])
+      = case (runTI $ do { (kctx,ictx,env) <- tiDecs ds ([],[],[])
                            ; u <- getSubst; return (kctx,ictx,u) }) of
             Left errMsg -> error errMsg
             Right (kctx,ictx,u) -> ( [(x,uapply u k) | (x,k) <- kctx]
                                    , [(x,uapply u t) | (x,t) <- ictx]
                                    , u)
-
-
 
 evProg (Prog ds) = do
   mapM_ putStrLn
@@ -202,11 +198,13 @@ greet (CmdArgs{..}) = do
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
-  -- mapM_ print (reverse ctx)
+  mapM_ print (reverse ctx)
   when (flagAll || flagTi || (not flagKi && not flagEv))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
-                            printTree( (foldr (.) id (map (uncurry subst) u) )
+                            printTree
+                            -- (show . ty2Type) 
+                                     ( (foldr (.) id (map (uncurry subst) u) )
                                        $ unbindTySch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
@@ -247,12 +245,3 @@ testMain = do
 #define MAIN_FUNCTION exeMain
 #endif
 main = MAIN_FUNCTION
-
-{-
-*Main> runTI $ ki kctx (type2Ty [type| Pair Bool |])
-Right (KVar k)
-*Main> let Right k = it
-*Main> runTI $ ki kctx (type2Ty [type| Pair Bool |]) >> getSubst
-Right [(k,KArr Star Star)]
-*Main> let Right u = it
--}

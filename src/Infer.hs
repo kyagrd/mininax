@@ -15,20 +15,21 @@ module Infer where
 
 import Syntax
 
+import Data.Char
 import Data.List
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.Error
 import Control.Monad.State
 import Language.LBNF.Runtime
-import Parser ()
+import Parser (ty2Type, con2var)
 import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless hiding (subst, Con)
 import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
--- import Debug.Trace
-trace _ a = a
+import Debug.Trace
+-- trace _ a = a
 
 instance HasVar (Name PSUT) PSUT where
   is_var (Var nm) = Just nm
@@ -49,15 +50,15 @@ instance ( Alpha n, Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Bind n PSUT) w
                          do { (_,e1) <- unbind b1
                             ; (_,e2) <- unbind b2
                             ; return (e1,e2) }
-              -- trace ("trace in instance Unify n a (Bind n a): " ++ show (e1,e2)) $
-              unifyStep undefined e1 e2
+              trace ("trace in instance Unify n a (Bind n a): " ++ show (e1,e2)) $
+               unifyStep undefined e1 e2
 
 instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
    unifyStep (dum :: Proxy(n,PSUT)) t1 t2 | isTm t1 && isTm t2 =
     do a1 <- runFreshMT (norm [] t1)
        a2 <- runFreshMT (norm [] t2)
-       -- trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+       trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+        case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
             (Just n1, Just n2) ->  if n1 == n2
                                      then return ()
                                      else addSub n1 (var n2);
@@ -67,8 +68,8 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
        where
        addSub n t = extendSubstitution (n, t)
    unifyStep (dum :: Proxy(n,PSUT)) a1 a2 =
-      -- trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-      case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+      trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
            (Just n1, Just n2) ->  if n1 == n2
                                     then return ()
                                     else addSub n1 (var n2);
@@ -83,6 +84,7 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
 -- TODO Can be even better if we pass curret stat rather than (Ustate cs [])?
 --      somehow this idea doesn't work ... [] replaced with current subst loops
 -- solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Either UnifyError [(n, a)]
+
 solveUnification (eqs :: [(a, a)]) =
      r >> return (uSubst final)
      -- case r of Left e  -> throwError e
@@ -98,7 +100,32 @@ solveUnification (eqs :: [(a, a)]) =
                                rwConstraints
                     Nothing -> return ()
 
+{-
+solveUnification (eqs :: [(PSUT, PSUT)]) =
+     r >> return (uSubst final)
+     -- case r of Left e  -> throwError e
+     --           Right _ -> return $ uSubst final
+     where
+     (r, final) = runState (runErrorT rwConstraints) (UState cs [])
+     cs = do (a1, a2) <- eqs
+             let (a1',a2') | isTm a1 && isTm a2
+                                       = ( runEither . runFreshMT $ norm [] a1
+                                         , runEither . runFreshMT $ norm [] a2 )
+                           | otherwise = (a1, a2)
+                 
+             return (UC dict a1' a2')
+     rwConstraints :: UM (Name PSUT) PSUT ()
+     rwConstraints =
+       do c <- dequeueConstraint
+          case c of Just (UC d a1 a2) ->
+                            do unifyStepD d (undefined :: Proxy (Name PSUT, PSUT)) a1 a2
+                               rwConstraints
+                    Nothing -> return ()
 
+
+runEither (Right a) = a
+runEither (Left b) = error b
+-}
 
 -- Don't know why but sometimes have to manually inline this.
 -- Myabe because of some dictionary passing craziness on subst???
@@ -120,6 +147,7 @@ mguMany ps = do
 
 
 getSubst = do { UState _ s <- lift get; return s }
+putSubst u = do { UState c s <- lift get; lift $ put (UState c s); return () }
 
 extendSubst (x,t) =
   do u <- getSubst
@@ -137,35 +165,38 @@ type KCtx = [(TyName,Ki)]
 type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
 
 
-ki :: KCtx -> Ctx -> Ty -> KI Ki
-ki kctx ictx (Var x) =
+ki :: KCtx -> Ctx -> Env -> Ty -> KI Ki
+ki kctx ictx env (Var x)
+   | head(show x) == '`' = throwError(strMsg $ show x++
+                                      " backquoted variable not allowed (ki)")
+ki kctx ictx env (Var x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ "ty var "++name2String x++" undefined")
+    Nothing -> throwError(strMsg $ "ty var "++show x++" undefined")
     Just k -> return k -- currently just simple kinds
-ki kctx ictx (TCon x) =
+ki kctx ictx env (TCon x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ "ty con "++name2String x++" undefined")
+    Nothing -> throwError(strMsg $ "ty con "++show x++" undefined")
     Just k -> return k -- currently just simple kinds
-ki kctx ictx (TArr t1 t2) =
-  do k1 <- ki kctx ictx t1
-     k2 <- ki kctx ictx t2
+ki kctx ictx env (TArr t1 t2) =
+  do k1 <- ki kctx ictx env t1
+     k2 <- ki kctx ictx env t2
      lift $ unify Star k1
      lift $ unify Star k2
      return Star
-ki kctx ictx (TApp t1 (Right t2)) =
-  do k1 <- ki kctx ictx t1
-     k2 <- ki kctx ictx t2
+ki kctx ictx env (TApp t1 (Right t2)) =
+  do k1 <- ki kctx ictx env t1
+     k2 <- ki kctx ictx env t2
      k <- Var <$> fresh "k"
      lift $ unify (KArr (Right k2) k) k1
      return k
-ki kctx ictx (TApp t1 (Left e2)) =
-  do k1 <- ki kctx ictx t1
-     t2 <- ti kctx ictx [] e2
+ki kctx ictx env (TApp t1 (Left e2)) =
+  do k1 <- ki kctx ictx env t1
+     t2 <- ti kctx ictx [] env e2
      k <- Var <$> fresh "k"
      lift $ unify (KArr (Left t2) k) k1
      return k
-ki kctx ictx (TFix t) =
-  do k1 <- ki kctx ictx t
+ki kctx ictx env (TFix t) =
+  do k1 <- ki kctx ictx env t
      k <- Var <$> fresh "k"
      lift $ unify (KArr (Right k) k) k1
      return k
@@ -209,37 +240,29 @@ unfoldTApp (TApp t1 t2) = unfoldTApp t1 ++ [t2]
 unfoldTApp ty           = [Right ty]
 
 
-
-
--- We need to examine how many parameters a fixpoint can have
--- To do so we must find index to the first argument r.
--- First need to know the kind of r, and the arity of the kind ???
--- But here we just have a hacky implementation, which I am
--- not 100% sure of it correctness. Seem to work for now :(
---
--- arityParam nm kctx ctx
---    length (kargs k)
---    where Just k = lookup nm kctx
-
+eitherVar = either (Left . Var) (Right . Var)
 
 -- ureturn ty = do { u <- getSubst; return (uapply u ty) }
 -- ureturn ty = do { u <- getSubst; return (foldr (.) id (map (uncurry subst) u) ty) }
 
 -- TODO catch errors and append more context info
-ti :: KCtx -> Ctx -> Ctx -> Tm -> TI Ty
-ti kctx ictx ctx (Var x) =
+-- ti kctx ictx ctx env tm
+ti :: KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
+ti kctx ictx ctx env (Var x)
+       | head(show x) == '`' = throwError(strMsg $ show x++
+                                          " backquoted variable not allowed (ti)")
+ti kctx ictx ctx env (Var x) =
   case lookup x (ctx++ictx) of
-    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Nothing -> throwError(strMsg $ show x++" undefined")
     Just tysch -> return =<< freshInst tysch
-ti kctx ictx ctx (Con x) =
+ti kctx ictx ctx env (Con x) =
   case lookup x ictx of
-    Nothing -> throwError(strMsg $ name2String x++" undefined")
+    Nothing -> throwError(strMsg $ show x++" undefined")
     Just tysch -> return =<< freshInst tysch
--- TODO term index
-ti kctx ictx ctx e@(In n t) -- this is a hacky implementation without checking kinds
+ti kctx ictx ctx env e@(In n t)
   | n < 0     = throwError(strMsg $ show e ++ " has negative number")
   | otherwise =
-    do ty <- ti kctx ictx ctx t
+    do ty <- ti kctx ictx ctx env t
        let m = fromInteger n
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
@@ -250,18 +273,19 @@ ti kctx ictx ctx e@(In n t) -- this is a hacky implementation without checking k
            ty1 <- Var <$> fresh "t"
            lift $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
-ti kctx ictx ctx (MIt b) =
-  do (f,tm@(Alt mphi as)) <- unbind b
+ti kctx ictx ctx env (MIt b) =
+  do (f, Alt mphi as) <- unbind b
      r <- fresh "_r"
      t <- fresh "t"
-     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (Var <$> fresh "b")
-                                 Just phi -> unbind phi
+     mphi' <- freshenMPhi kctx ictx mphi
+     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> fresh "b_")
+                                  Just phi -> do unbind (substBackquote phi)
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      k <- fresh "k"
      let kctx' = (r, Var k) : kctx
      let ctx' = (f,bind is tyf) : ctx
-     tytm' <- ti kctx' ictx ctx' tm
+     tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
      u <- getSubst
      let ty = foldr (.) id (map (uncurry subst) u) $
@@ -270,22 +294,26 @@ ti kctx ictx ctx (MIt b) =
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MIt b) )
      return ty
-   where
-   eitherVar = either (Left . Var) (Right . Var)
-ti kctx ictx ctx (MPr b) =
-  do ((f,cast),tm@(Alt mphi as)) <- unbind b
+  where
+  substBackquote = foldr (.) id (map (uncurry LN.subst) env')
+        where
+        env' = [(string2Name('`':show x)::TmName,t) | (x,t) <-env]
+ti kctx ictx ctx env (MPr b) =
+  do ((f,cast), Alt mphi as) <- unbind b
      r <- fresh "_r"
      t <- fresh "t"
      k <- fresh "k"
-     (is, tyret) <- case mphi of Nothing  -> (,) [] <$> (Var <$> fresh "b")
-                                 Just phi -> unbind phi
+     mphi' <- freshenMPhi kctx ictx mphi
+     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> fresh "_b")
+                                  Just phi -> do unbind (substBackquote phi)
      let tyf    = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
                   foldl TApp (TFix (Var t)) (map eitherVar is)
-     let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
+     let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is)
+                  `TArr` tyret
      let kctx' = (r, Var k) : kctx
      let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
-     tytm' <- ti kctx' ictx ctx' tm
+     tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
      u <- getSubst
      let ty = foldr (.) id (map (uncurry subst) u) $
@@ -294,47 +322,67 @@ ti kctx ictx ctx (MPr b) =
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MPr b) )
      return ty
-   where
-   eitherVar = either (Left . Var) (Right . Var)
-ti kctx ictx ctx (Lam b) =
+  where
+  substBackquote = foldr (.) id (map (uncurry LN.subst) env')
+        where
+        env' = [(string2Name('`':show x)::TmName,t) | (x,t) <-env]
+ti kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> fresh "_"
-     ty2 <- ti kctx ictx ((x, bind [] ty1) : ctx) t
+     ty2 <- ti kctx ictx ((x, bind [] ty1) : ctx) env t
      return (TArr ty1 ty2)
-ti kctx ictx ctx (App t1 t2) =
-  do ty1 <- ti kctx ictx ctx t1
-     ty2 <- ti kctx ictx ctx t2
+ti kctx ictx ctx env (App t1 t2) =
+  do ty1 <- ti kctx ictx ctx env t1
+     ty2 <- ti kctx ictx ctx env t2
      ty <- Var <$> fresh "a"
      lift $ unify (TArr ty2 ty) ty1
      return ty
-ti kctx ictx ctx (Let b) =
+ti kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
-     ty <- ti kctx ictx ctx t1
+     ty <- ti kctx ictx ctx env t1
      u <- getSubst
-     tysch <- closeTy kctx ctx (foldr (.) id (map (uncurry subst) u) ty)
-     ti kctx ictx ((x, tysch) : ctx) t2
-ti kctx ictx ctx (Alt _ []) = throwError(strMsg "empty Alts")
-ti kctx ictx ctx (Alt Nothing as) = -- TODO coverage of all ctors
-  do tys <- mapM (tiAlt kctx ictx ctx) as
+     tysch <- closeTy kctx (ictx++ctx) (foldr (.) id (map (uncurry subst) u) ty)
+     ti kctx ictx ((x, tysch) : ctx) env t2
+ti kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts") -- TODO this should be possibe for empty types
+ti kctx ictx ctx env e@(Alt Nothing as) = tiAlts kctx ictx ctx env e
+ti kctx ictx ctx env (Alt (Just phi) as) =
+  do phi <- freshenPhi kctx ictx phi
+     tiAlts kctx ictx ctx env (Alt (Just phi) as)
+
+
+tiAlts kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
+  do tys <- mapM (tiAlt kctx ictx ctx env Nothing) as
      lift $ unifyMany (zip tys (tail tys))
      return (head tys)
-ti kctx ictx ctx (Alt (Just im) as) = -- TODO coverage of all ctors
-  do tys <- mapM (tiAlt kctx ictx ctx) as
+tiAlts kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
+  do tys <- mapM (tiAlt kctx ictx ctx env (Just phi)) as
      u <- getSubst
      let (Right tcon : args) =
             tApp2list $ case (head tys) of
                           TArr t _ -> foldr (.) id (map (uncurry subst) u) t
-     (is, rngty) <- unbind im
+     (is, rngty) <- unbind (substBackquote phi)
      when (1 + length is > length args)
-        $ throwError(strMsg $ "too many indices in "++show im)
+        $ throwError(strMsg $ "too many indices in "++show phi)
      let args' = replaceSuffix args (map eitherVar is)
      let domty = foldl TApp tcon args'
      let tysch = bind is (TArr domty rngty)
      tys' <- mapM freshInst (replicate (length as) tysch)
      lift $ unifyMany (zip tys' tys)
      return =<< freshInst tysch
-   where
-   eitherVar = either (Left . Var) (Right . Var)
+  where
+  substBackquote = foldr (.) id (map (uncurry LN.subst) env')
+        where
+        env' = [(string2Name('`':show x)::TmName,t) | (x,t) <-env]
+
+
+
+freshenPhi kctx ictx phi = snd <$> unbind (bind fvPhi phi)
+  where
+  fvPhi = fv phi \\ (fv kctx ++ fv ictx_) :: [Name PSUT]
+  ictx_ = filter (isUpper.head.show.fst) ictx
+
+freshenMPhi kctx ictx Nothing    = return Nothing
+freshenMPhi kctx ictx (Just phi) = Just <$> freshenPhi kctx ictx phi
 
 replaceSuffix xs ys = reverse (drop (length ys) (reverse xs)) ++ ys
 
@@ -345,13 +393,37 @@ app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]
 
 
+{-
+ (is,body) <- unbind phi
+     let ictx_ = filter (isUpper.head.show.fst) ictx
+     let fvTyPhi = nub $ (fv body \\ fv is) \\ (fv kctx ++ fv ictx_ ++ fvTmInTy body)
+         fvTmPhi = nub $ (fvTmInTy body \\ fv is) \\ (fv kctx ++ fv ictx_)
+     kctx' <- (++ kctx) <$>
+                 sequence [ (,) x <$> (Var <$> fresh "k") | x <- fvTyPhi ]
+     ictx' <- (++ ictx) <$>
+                 sequence [ (,) x <$> (bind [] <$> (Var <$> fresh "c")) | x <- fvTmPhi ]
+-}
 
-tiAlt kctx ictx ctx (x,b) =
+
+tiAlt kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
                  Just xt -> freshInst xt
-     u <- getSubst
+     u <- trace ("++++++++"++show x++"++++++++++++++\n"++show mphi++"\n xTy = "++show xTy) $ getSubst
      let xty = foldr (.) id (map (uncurry subst) u) xTy
+     let xtyUnfold = unfoldTArr xty
+     let (xtyArgs, xtyRet) = (init xtyUnfold, last xtyUnfold)
+     (u,is,bodyTy,mt) <- case trace (show(xty,xtyRet,mphi)) mphi of
+        Nothing  -> return (u,[],undefined,Nothing)
+        Just phi -> do
+          (is, bodyTy) <- unbind phi
+          t <- (Var <$> fresh "t")
+          lift $ unify (foldl TApp t $ map eitherVar is) xtyRet
+          u <- getSubst
+          let bodyTy' = foldr (.) id (map (uncurry subst) u) bodyTy
+          return (u,is,bodyTy',Just t)
+     let xty_ = trace "@@@@@@@@@" $ foldr (.) id (map (uncurry subst) u) xty
+     let xty = case trace ("xty_ = "++show xty_) () of _ -> xty_
      let xtyUnfold = unfoldTArr xty
      let (xtyArgs, xtyRet) = (init xtyUnfold, last xtyUnfold)
      let xTyVars = nub $ (fv xty \\ fvTmInTy xty)
@@ -360,10 +432,27 @@ tiAlt kctx ictx ctx (x,b) =
                       \\ (fv kctx ++ fv ictx ++ fv ctx)
      let eTyVars = xTyVars \\ fv xtyRet
      let eTmVars = xTmVars \\ fv xtyRet
+
+     () <- trace ("evars : "++show(eTyVars,eTmVars)) $ return ()
+
+     let ictx_ = filter (isUpper.head.show.fst) ictx
+     let fvTyPhi = case mt of
+                     Nothing -> []
+                     Just _  -> nub $ (fv bodyTy \\ fv is) \\ (fv kctx ++ fv ictx_ ++ fvTmInTy bodyTy)
+         fvTmPhi = case mt of
+                     Nothing -> []
+                     Just _  -> nub $ (fvTmInTy bodyTy \\ fv is) \\ (fv kctx ++ fv ictx_)
+
      -- substitute existential vars as bogus TCon or Con to avoid unification
-     let xty' = foldr (.) id (  [LN.subst nm (TCon nm) | nm <- eTyVars] 
-                             ++ [LN.subst nm (Con nm)  | nm <- eTmVars] ) xty
-     let xtyArgs' = init (unfoldTArr xty')
+     -- TODO generalized existentials???
+     let xty' = foldr (.) id
+                    (  [LN.subst nm (TCon nm) | nm <- eTyVars] 
+                    ++ [LN.subst nm (Con nm)  | nm <- eTmVars] ) xty
+     () <- trace ("TODO " ++ show(ty2Type xty')) $ return () 
+     let bodyTy' = foldr (.) id
+                    (  [LN.subst nm (TCon nm) | nm <- eTyVars] 
+                    ++ [LN.subst nm (Con nm)  | nm <- eTmVars] ) bodyTy
+     let xtyArgs' = trace (show (xty',init (unfoldTArr xty'))) $ init (unfoldTArr xty')
      let kctx' = kctx
      let ictx' = ictx
      -- -- adding existental TCon or Con to context seems unnecessary
@@ -373,29 +462,59 @@ tiAlt kctx ictx ctx (x,b) =
      --                             | nm <- eTmVars]
      --               <*> return ictx
      (ns,t) <- unbind b
-     let ctx' = zip ns (map (bind []) xtyArgs') ++ ctx
-     -- -- code before considering existentials
-     -- tyvars <- sequence $ replicate (length ns) (bind [] <$> Var <$> fresh "a")
-     -- let ctx' = zip ns tyvars ++ ctx
-     domty <- ti kctx' ictx' ctx' (foldl1 App (Con x : map Var ns))
-     rngty <- ti kctx' ictx' ctx' t
-     lift $ unify xtyRet domty
+     let ctx' = trace (show ns ++", "++ show xtyArgs') $ zip ns (map (bind []) xtyArgs') ++ ctx
+     () <- trace "zzaaa" $ return ()
+     domty <- trace "zzzz" $ ti kctx' ictx' ctx' env (trace "wwww" $ foldl1 App (Con x : map Var ns))
+     rngty <- trace "bbbb" $ ti kctx' ictx' ctx' env (trace "BBBB " t)
+     () <- trace ("zzaaa2\t"++show xtyRet++" =?= "++show domty) $ return ()
+     lift $ trace "aaaaaa" $ unify xtyRet (trace "AAAA " domty)
+     () <- trace "zzaaa3" $ return ()
      u <- getSubst
+     case mt of
+       Nothing  -> return ()
+       Just _   ->
+                do () <- trace ("zzaaa4\t"++
+                                show bodyTy'++" =?= "++show rngty) $ return ()
+                   lift $ unify bodyTy' rngty
+     u <- getSubst
+     () <- trace "zzaaa5" $ return ()
      let ty = foldr (.) id (map (uncurry subst) u) (TArr domty rngty)
      let TArr domty rngty = ty
      let eRetVars = intersect (eTyVars ++ eTmVars) (fv ty)
-     unless (trace (show ty) $ null eRetVars) (throwError . strMsg $
-                              "rigid variables "++ show eRetVars ++
-                              " in the return type "++ show rngty ++
-                              " of "++ show t)
-     return $ trace
-                ("return type: "++show ty ++ "\n"++
-                 show(eTyVars::[TyName]
-                     ,fv xtyRet::[TyName]
-                     ,eTyVars\\fv xtyRet::[TyName])
-                 ++
-                 "\n\t"++ show eTyVars++" of "++show xtyRet ++ show(fv xtyRet::[TyName])++" in "++show (x,b))
-              ty
+     unless (trace (show(ty,eRetVars)) $ null eRetVars)
+            (throwError . strMsg $ "rigid variables "++ show eRetVars ++
+                                   " in the return type "++ show rngty ++
+                                   " of "++ show t)
+     u <- getSubst
+     unless (null $ filter (\(x,t)-> elem x (fvTyPhi ++ fvTmPhi) && case t of {Var _ -> False; _ -> True}) u)
+       (throwError . strMsg $ "polymorphic vars in phi cannot be specialized "++"\n\t"++show(filter (\(x,t)-> elem x (fvTyPhi ++ fvTmPhi) && case t of {Var _ -> False; _ -> True}) u))
+     case mphi of
+       Nothing -> trace
+                    ("return type: "++show ty ++ "\n"++
+                     show(eTyVars++eTmVars::[TyName]
+                         ,fv xtyRet::[TyName]
+                         ,(eTyVars++eTmVars)\\fv xtyRet::[TyName])
+                     ++
+                     "\n\t"++ show(eTyVars++eTmVars)++" of "++show xtyRet
+                           ++ show(fv xtyRet::[TyName])++" in "++show (x,b))
+                    (return ty)
+       Just phi -> do
+         let Just t = trace
+                        ("return type: "++show ty ++ "\n"++
+                         show(eTyVars++eTmVars::[TyName]
+                             ,fv xtyRet::[TyName]
+                             ,(eTyVars++eTmVars)\\fv xtyRet::[TyName])
+                         ++
+                         "\n\t"++ show(eTyVars++eTmVars)++" of "++show xtyRet
+                               ++ show(fv xtyRet::[TyName])++" in "++show (x,b))
+                        mt
+         let t' = foldr (.) id (map (uncurry subst) u) t
+         (is,bodyTy) <- unbind phi
+         let bodyTy' = foldr (.) id (map (uncurry subst) u) bodyTy
+         return (foldl TApp t' (map eitherVar is) `TArr` bodyTy')
+
+
+
 
 _x = "x"
 x = Var _x
@@ -416,9 +535,9 @@ runTI = runTIwith nullState
 
 runTIwith st = runUSwith st . runErrorT . runFreshMT
 
-ti' ctx = runTI . ti [] [] ctx
+ti' ctx = runTI . ti [] [] [] ctx
 
-ty = runTI $ ti [] [] [] (lam _x x)
+ty = runTI $ ti [] [] [] [] (lam _x x)
 
 
 unbindTySch tsch = snd (unsafeUnbind tsch)
@@ -426,67 +545,77 @@ unbindTySch tsch = snd (unsafeUnbind tsch)
 
 -- evaluation
 
-sreturn ctx t = return $ foldr (.) id (map (uncurry LN.subst) ctx) t
+type Env = [(TmName,Tm)]
 
-ev ctx (Var x) =
-  case lookup x ctx of
-    Nothing -> throwError(strMsg $ name2String x++" undefined")
+sreturn env t = return $ foldr (.) id (map (uncurry LN.subst) env) t
+
+
+
+
+ev env (Var x)
+  | head(show x) == '`' = throwError(strMsg $ show x++
+                                     " backquoted variable not allowed (ev)")
+ev env (Var x) =
+  case lookup x env of
+    Nothing -> throwError(strMsg $ show x++" undefined")
     Just v  -> return v
-ev ctx v@(Con x) = return v
-ev ctx (In n t) = In n <$> ev ctx t
-ev ctx v@(MIt b) = return v
-ev ctx v@(MPr b) = return v
-ev ctx v@(Lam b) = return v
-ev ctx (App t1 t2) =
-  do v1 <- ev ctx t1
-     v2 <- ev ctx t2
+ev env v@(Con x) = return v
+ev env (In n t) = In n <$> ev env t
+ev env v@(MIt b) = return v
+ev env v@(MPr b) = return v
+ev env v@(Lam b) = return v
+ev env (App t1 t2) =
+  do v1 <- ev env t1
+     v2 <- ev env t2
      case v1 of
        Var x -> error $ show x ++ " (free variable): should never happen"
        Con _ -> return $ App v1 v2
        In _ _ -> return $ App v1 v2
        App _ _ -> return $ App v1 v2
        Lam b -> do (x, t) <- unbind b
-                   let ctx' = (x,v2) : ctx
-                   sreturn [(x,v2)] =<< ev ctx' t
+                   let env' = (x,v2) : env
+                   sreturn [(x,v2)] =<< ev env' t
        MIt b -> do (f,t) <- unbind b
-                   let ctx' = (f,v1) : ctx
+                   let env' = (f,v1) : env
                    let In _ v = v2
-                   sreturn [(f,v1)] =<< ev ctx' (App t v)
+                   sreturn [(f,v1)] =<< ev env' (App t v)
        MPr b -> do ((f,cast),t) <- unbind b
-                   let ctx' = (f,v1) : (cast,lam _x x) : ctx
+                   let env' = (f,v1) : (cast,lam _x x) : env
                    let In _ v = v2
-                   sreturn [(f,v1),(cast,lam _x x)] =<< ev ctx' (App t v)
+                   sreturn [(f,v1),(cast,lam _x x)] =<< ev env' (App t v)
        Alt m as ->
          do let (Con c:vs) = app2list v2
             case lookup c as of
               Nothing -> throwError(strMsg $ show c++" undefined")
               Just b  ->
                 do (xs,t) <- unbind b
-                   let ctx' = zip xs vs ++ ctx
-                   sreturn (zip xs vs) =<< ev ctx' t
-ev ctx (Let b) = do ((x, Embed t1), t2) <- unbind b
-                    v1 <- ev ctx t1
-                    let ctx' = (x,v1) : ctx
-                    sreturn [(x,v1)] =<< ev ctx' t2
-ev ctx v@(Alt _ _) = return v
+                   let env' = zip xs vs ++ env
+                   sreturn (zip xs vs) =<< ev env' t
+ev env (Let b) = do ((x, Embed t1), t2) <- unbind b
+                    v1 <- ev env t1
+                    let env' = (x,v1) : env
+                    sreturn [(x,v1)] =<< ev env' t2
+ev env v@(Alt _ _) = return v
 
 
-
-norm ctx v@(Var x) =
-  case lookup x ctx of
+norm env v@(Var x)
+  | head(show x) == '`' = throwError(strMsg $ show x++
+                                     " backquoted variable not allowed (norm)")
+norm env v@(Var x) =
+  case lookup x env of
     Nothing -> return v
     Just v  -> return v
-norm ctx v@(Con x) = return v
-norm ctx (In n t) = In n <$> norm ctx t
-norm ctx (MIt b) = do (xs,t) <- unbind b
-                      MIt <$> (bind xs <$> norm ctx t)
-norm ctx (MPr b) = do (xs,t) <- unbind b
-                      MPr <$> (bind xs <$> norm ctx t)
-norm ctx (Lam b) = do (x, t) <- unbind b
-                      Lam . bind x <$> norm ctx t
-norm ctx (App t1 t2) =
-  do v1 <- norm ctx t1
-     v2 <- norm ctx t2
+norm env v@(Con x) = return v
+norm env (In n t) = In n <$> norm env t
+norm env (MIt b) = do (xs,t) <- unbind b
+                      MIt <$> (bind xs <$> norm env t)
+norm env (MPr b) = do (xs,t) <- unbind b
+                      MPr <$> (bind xs <$> norm env t)
+norm env (Lam b) = do (x, t) <- unbind b
+                      Lam . bind x <$> norm env t
+norm env (App t1 t2) =
+  do v1 <- norm env t1
+     v2 <- norm env t2
      case v1 of
        Var x -> return $ App v1 v2
        Con _ -> return $ App v1 v2
@@ -494,34 +623,34 @@ norm ctx (App t1 t2) =
        App _ _ -> return $ App v1 v2
        Lam b ->
          do (x, t) <- unbind b
-            let ctx' = (x,v2) : ctx
-            sreturn [(x,v2)] =<< norm ctx' t
+            let env' = (x,v2) : env
+            sreturn [(x,v2)] =<< norm env' t
        MIt b ->
          do (f,t) <- unbind b
-            let ctx' = (f,v1) : ctx
+            let env' = (f,v1) : env
             case v2 of
-              In _ v -> sreturn [(f,v1)] =<< norm ctx' (App t v)
+              In _ v -> sreturn [(f,v1)] =<< norm env' (App t v)
               _      -> return (App v1 v2)
        MPr b ->
          do ((f,cast),t) <- unbind b
-            let ctx' = (f,v1) : (cast,lam _x x) : ctx
+            let env' = (f,v1) : (cast,lam _x x) : env
             case v2 of
-              In _ v -> sreturn [(f,v1),(cast,lam _x x)] =<< norm ctx' (App t v)
+              In _ v -> sreturn [(f,v1),(cast,lam _x x)] =<< norm env' (App t v)
               _      -> return (App v1 v2)
        Alt m as ->
          do let (Con c:vs) = app2list v2
             case lookup c as of
-              Nothing -> throwError(strMsg $ name2String c++" undefined")
+              Nothing -> throwError(strMsg $ show c++" undefined")
               Just b  ->
                 do (xs,t) <- unbind b
-                   let ctx' = zip xs vs ++ ctx
-                   sreturn (zip xs vs) =<< norm ctx' t
-norm ctx (Let b) = do ((x, Embed t1), t2) <- unbind b
-                      v1 <- norm ctx t1
-                      let ctx' = (x,v1) : ctx
-                      sreturn [(x,v1)] =<< norm ctx' t2
-norm ctx (Alt m as) =
+                   let env' = zip xs vs ++ env
+                   sreturn (zip xs vs) =<< norm env' t
+norm env (Let b) = do ((x, Embed t1), t2) <- unbind b
+                      v1 <- norm env t1
+                      let env' = (x,v1) : env
+                      sreturn [(x,v1)] =<< norm env' t2
+norm env (Alt m as) =
   Alt m <$> sequence [ do (xs,t) <- unbind b
-                          (,) c <$> (bind xs <$> norm ctx t)
+                          (,) c <$> (bind xs <$> norm env t)
                       | (c,b) <- as ]
 
