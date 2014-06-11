@@ -1,0 +1,92 @@
+data P x r : {v} -> {v} -> * where
+  { PNil    : P x r {i} {i}
+  ; PCons   : x {i} {j} -> r {j} {k} -> P x r {i} {k}
+  } ;
+
+-- synonym Path a {i} {j} = Mu(P a) {i} {j}
+
+pNil  = In 2 PNil ;
+pCons = \x -> \xs -> In 2 (PCons x xs) ;
+
+append = mit app {{ {i} {j} . Mu(P x) {j} {k} -> Mu(P x) {i} {k} }}
+           { PNil       -> \ys  -> ys
+           ; PCons x xs -> \ys  -> pCons x (app xs ys)
+           } ;
+
+data Unit = U ;
+data Elem a : {Unit} -> {Unit} -> * where
+  { MkElem : a -> Elem a {U} {U}
+  } ;
+
+-- synonym List a = Path (Elem a) {U} {U}
+ 
+nil = pNil ;
+cons = \x -> pCons (MkElem x) ;
+
+
+data Bool = False | True ;
+
+data N r = Z | S r ;
+zero = In 0 Z ;
+succ = \n -> In 0 (S n) ;
+
+plus = mit add { Z   -> \m -> m
+               ; S n -> \m -> succ (add n m) } ;
+
+data ElemV a : {Mu N} -> {Mu N} -> * where
+  { MkElemV : a -> ElemV a {`succ n} {n}
+  } ;
+
+-- synonym  Vec a {n} = Path (ElemV a) {n} {`zero}
+ 
+vNil = pNil ;
+vCons = \x -> pCons (MkElemV x) ;
+
+data Ty = I | B ;
+
+data Val : {Ty} -> * where
+  { IV  : Mu N -> Val {I}
+  ; BV  : Bool -> Val {B}
+  } ;
+
+plusV = { IV n -> { IV m -> IV (plus n m) } } ;
+ifV = { BV b -> \v1 -> \v2 -> {True -> v1; False -> v2} b } ;
+
+data E r : {Ty} -> * where
+  { VAL   : Val {t} -> E r {t}
+  ; PLUS  : r {I} -> r {I} -> E r {I}
+  ; IF    : r {B} -> r {t} -> r {t} -> E r {t}
+  } ;
+
+vAL = \v -> In 1 (VAL v) ;
+pLUS = \n -> \m -> In 1 (PLUS n m) ;
+iF = \b -> \e1 -> \e2 -> In 1 (IF b e1 e2) ;
+
+
+eval =  mit ev {{ {t} . Val {t} }}
+          { VAL v       -> v
+          ; PLUS e1 e2  -> plusV (ev e1) (ev e2)
+          ; IF e0 e1 e2 ->  ifV (ev e0) (ev e1) (ev e2)
+          } ;
+
+data Instr  r : { Mu(P(Elem Ty)){U}{U} } -> { Mu(P(Elem Ty)){U}{U} } -> * where
+  { PUSH   : Val {t} -> Instr r {ts} {`cons t ts}
+  ; ADD    : Instr r {`cons I (`cons I ts)} {`cons I ts}
+  -- ; IFPOP  : Mu(P r) {ts} {ts'} -> -- TODO this should work but not working
+  --            Mu(P r) {ts} {ts'} ->
+  --            Instr r {`cons B ts} {ts'}
+  } ;
+
+pUSH = \n -> In 2 (PUSH n);
+aDD = In 2 ADD ;
+-- iFPOP = \n -> \m -> In 2 (IFPOP n m) ; -- TODO when IFPOP works
+
+-- synonym  Code {sc} {sc'} = Path Inst {sc} {sc'}
+
+compile =
+  mit cmpl {{ {t} . Mu(P(Mu Instr)) {ts} {`cons t ts} }}
+    { VAL v       -> pCons (pUSH v) pNil
+    -- ; PLUS e1 e2  -> append (append (cmpl e1) (cmpl e2)) (pCons aDD pNil) -- TODO this should be working but not (do we need kind poly???)
+    -- ; IF e0 e1 e2 -> append (cmpl e0) (pCons  (iFPOP (cmpl e1) (cmpl e2)) pNil) -- TODO when IFPOP works
+    } ;
+

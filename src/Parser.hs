@@ -30,6 +30,9 @@ import qualified Syntax as S
 import Control.Applicative
 import System.IO
 import Data.Char
+-- import Debug.Trace
+trace _ a = a
+
 
 -- antiquote "[" ":" ":]" ;
 bnfc [lbnf|
@@ -113,7 +116,7 @@ instance Print S.PSUT where
           | isKi x = prtList (map ki2Kind xs)
           | isTy x = prtList (map ty2Type xs)
           | isTm x = prtList (map tm2Term xs)
-  prtList []       = prtList ([]::[Integer])
+  prtList []            = prtList ([]::[Integer])
 
 -- instance Print Ki where
 --   prt n = prt n . ki2Kind
@@ -134,10 +137,11 @@ kind2Ki (KVar (LIdent s)) = S.Var (string2Name s)
 kind2Ki (KArr (KArgR k1) k2) = S.KArr (Right $ kind2Ki k1) (kind2Ki k2)
 kind2Ki (KArr (KArgL t1) k2) = S.KArr (Left  $ type2Ty t1) (kind2Ki k2)
 
+
 ki2Kind S.Star = KStar
 ki2Kind (S.Var nm) = KVar (LIdent $ show nm)
 ki2Kind (S.KArr (Right k1) k2) = KArr (KArgR $ ki2Kind k1) (ki2Kind k2)
-ki2Kind (S.KArr (Left  t1) k2) = KArr (KArgL $ ty2Type t1) (ki2Kind k2)
+ki2Kind (S.KArr (Left  t1) k2) = KArr (KArgL $ (trace ("yy "++show t1) ty2Type) t1) (ki2Kind k2)
 
 
 type2Ty (TVar (LIdent s)) = S.Var (string2Name s)
@@ -151,7 +155,7 @@ ty2Type (S.Var nm) = TVar (LIdent $ show nm)
 ty2Type (S.TCon nm) = TCon (UIdent $ show nm)
 ty2Type (S.TArr t1 t2) = TArr (ty2Type t1) (ty2Type t2)
 ty2Type (S.TApp t1 (Right t2)) = TApp (ty2Type t1) (TArgR $ ty2Type t2)
-ty2Type (S.TApp t1 (Left  e2)) = TApp (ty2Type t1) (TArgL $ tm2Term e2)
+ty2Type (S.TApp t1 (Left  e2)) = TApp (ty2Type t1) (TArgL $ (trace ("zz "++show e2) $ tm2Term) e2)
 ty2Type (S.TFix t) = TFix (ty2Type t)
 
 
@@ -212,6 +216,8 @@ tm2Term (S.Alt (Just phi) cs) =
   (nms,ty) = unsafeUnbind phi
   names2ident (Right nm) = IVarR (LIdent $ show nm)
   names2ident (Left  nm) = IVarL (LIdent $ show nm)
+tm2Term t = Con(UIdent $ printTree t)
+
 
 hTokens h = tokens <$> hGetContents h
 
@@ -219,13 +225,15 @@ hProg h = pProg <$> hTokens h
 
 
 ------------------------------------------------------
-{-
--- * Overloaded pretty-printer
-printTree :: Print a => a -> String
-printTree = render . prt 0
+
+-- -- * Overloaded pretty-printer
+-- printTree :: Print a => a -> String
+-- printTree = render . prt 0
 
 render :: Doc -> String
-render d = rend 0 (map ($ "") $ d []) "" where
+render = renderN 0
+
+renderN n d = rend n (map ($ "") $ d []) "  " where
   rend i ss = case ss of
     "["      :ts -> showChar '[' . rend i ts
     "("      :ts -> showChar '(' . rend i ts
@@ -266,7 +274,7 @@ concatS = foldr (.) id
 
 replicateS :: Int -> ShowS -> ShowS
 replicateS n f = concatS (replicate n f)
--}
+
 ------------------------------------------------------
 instance Show PSUT where show = printTree
 

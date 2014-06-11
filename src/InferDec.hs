@@ -36,7 +36,7 @@ import Control.Monad.Error
 import Control.Monad.Trans
 import Control.Applicative
 import Generics.RepLib.Unify (subst)
-import Unbound.LocallyNameless ( bind, fresh, string2Name, aeq, fv )
+import Unbound.LocallyNameless ( unbind, bind, fresh, string2Name, aeq, fv )
 import qualified Unbound.LocallyNameless as LN
 import GHC.Exts( IsString(..) )
 -- import Debug.Trace
@@ -104,7 +104,7 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
                           IVarR(LIdent a) -> Right $ Var(string2Name a)
                           IVarL(LIdent a) -> Left  $ Var(string2Name a)
 
-tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace tc $
+tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("tiDec "++tc) $
   do kArgSigs <- sequence $
                    do i <- as -- list monad
                       return $ case i of
@@ -112,19 +112,21 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace tc $
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
                                                (Left .  Var <$> fresh "i")
+     () <- trace ("kArgSigs = "++show kArgSigs) $ return ()
      let kArgSigsR = [ (x,k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,bind [] t) | (x,Left t)  <- kArgSigs]
      let tcSig = (string2Name tc, foldr KArr (kind2Ki k) (map snd kArgSigs))
-     mapM (kiGAlt tcSig as' (kArgSigsR ++ kctx) (kArgSigsL ++ ictx) env) gAlts
+     cSigs <- mapM (kiGAlt tcSig as' (kArgSigsR++kctx) (kArgSigsL++ictx) env)
+                   gAlts
      let kctx' = tcSig : kctx
      u <- getSubst
-     ictx' <- (++ ictx) <$>
+     ictx' <- (++ ictx) <$> 
                   sequence
-                    [ (,) (string2Name c) <$>
-                          closeTy kctx' (filter (isUpper.head.show.fst) ictx)
-                            (foldr (.) id (map (uncurry subst) u)
-                                   (type2Ty' env ty))
-                     | GAlt (UIdent c) ty <- gAlts ]
+                    [ (,) c <$>
+                            closeTy kctx' (filter (isUpper.head.show.fst) ictx)
+                                    (foldr (.) id (map (uncurry subst) u) ty)
+                     | (c,ty) <- cSigs ]
+     trace ("wwwwww") $ return ()
      return (kctx',ictx',env)
   where
   as' = do i <- as
@@ -137,23 +139,40 @@ kiDAlt kctx ictx env (DAlt _ ts) =
      lift $ unifyMany (zip (repeat Star) ks)
   where
 
-kiGAlt :: (TyName, Ki) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI ()
-kiGAlt (tc,kappa) as kctx ictx env (GAlt (UIdent c) t) = trace (c++","++show ty) $
+kiGAlt :: (TyName, Ki) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI (TmName,Ty)
+kiGAlt (tc,kappa) as kctx ictx env (GAlt (UIdent c) t) =
+ trace ("kiGAlt "++c++" : "++show ty) $
   do unless (length as < length resTyUnfold)
             (throwError . strMsg $ "need more args for "++show resTyUnfold++" the result type of "++c)
      unless (and (zipWith aeq (Right(TCon tc) : as) resTyUnfold))
             (throwError . strMsg $ "result type param args not uniform in "++c)
-     kctx' <- (++ kctx) <$> sequence [(,) x <$> freshKi | x <- fvTy]
-     ictx' <- (++ ictx) <$> sequence [(,) x <$> freshTy | x <- fvTm]
-     k <- ki ((tc,kappa):kctx') ictx' env resTy
-     ks <- mapM (ki kctx' ictx' env) ts
+     -- must freshen names to avoid name collision
+     -- e.g. (a,k) in kctx can collide if there are k in (fv ty)
+     (_,ty') <- unbind $ bind fvAll ty
+     let (resTy':ts') = reverse (unfoldTArr ty')
+         resTyUnfold' = unfoldTApp resTy'
+         fvAll' = nub (fv ty' \\ fv as) \\ (tc : fv_upper_kctx_ctx)
+         fvTm' = nub (fvTmInTy ty' \\ fv as) \\ (tc : fv_upper_kctx_ctx)
+         fvTy' = fvAll' \\ fvTm'
+     kctx' <- (++ kctx) <$> sequence [(,) x <$> freshKi | x <- fvTy']
+     ictx' <- (++ ictx) <$> sequence [(,) x <$> freshTy | x <- fvTm']
+     () <- trace ("fvTmInTy ty' = "++show (fvTmInTy ty'::[TmName])) $ return ()
+     () <- trace ("kctx' = "++show kctx') $ return ()
+     () <- trace ("ictx' = "++show ictx') $ return ()
+     k <- ki ((tc,kappa):kctx') ictx' env resTy'
+     () <- trace ("wwwwww222") $ return ()
+     ks <- mapM (ki kctx' ictx' env) ts'
+     () <- trace ("wwwwww333") $ return ()
      lift $ unifyMany (zip (repeat Star) (k:ks))
+     () <- trace ("wwwwww444") $ return ()
+     return (string2Name c, ty')
   where
+  fv_upper_kctx_ctx = filter (isUpper.head.show) (fv kctx ++ fv ictx)
   ty = type2Ty' env t
   (resTy:ts) = reverse (unfoldTArr ty)
   resTyUnfold = unfoldTApp resTy
-  fvAll = nub (fv ty \\ fv as) \\ [tc]
-  fvTm = nub (fvTmInTy ty \\ fv as) \\ [tc]
+  fvAll = nub (fv ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
+  fvTm = nub (fvTmInTy ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
   fvTy = fvAll \\ fvTm
   freshKi = Var <$> fresh "k"
   freshTy = (bind [] . Var <$> fresh "a")

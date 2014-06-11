@@ -171,11 +171,11 @@ ki kctx ictx env (Var x)
                                       " backquoted variable not allowed (ki)")
 ki kctx ictx env (Var x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ "ty var "++show x++" undefined")
+    Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
     Just k -> return k -- currently just simple kinds
 ki kctx ictx env (TCon x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ "ty con "++show x++" undefined")
+    Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
     Just k -> return k -- currently just simple kinds
 ki kctx ictx env (TArr t1 t2) =
   do k1 <- ki kctx ictx env t1
@@ -218,7 +218,7 @@ fvTmInTy (Var _) = []
 fvTmInTy (TCon _) = []
 fvTmInTy (TArr t1 t2) = fvTmInTy t1 ++ fvTmInTy t2
 fvTmInTy (TApp t1 (Right t2)) = fvTmInTy t1 ++ fvTmInTy t2
-fvTmInTy (TApp t1 (Left  t2)) = fvTmInTy t2 ++ fv t2
+fvTmInTy (TApp t1 (Left  t2)) = fvTmInTy t1 ++ fv t2
 fvTmInTy (TFix t) = fvTmInTy t
 fvTmInTy _ = error "this should be unrechable for fvTmInTy" 
 
@@ -253,11 +253,11 @@ ti kctx ictx ctx env (Var x)
                                           " backquoted variable not allowed (ti)")
 ti kctx ictx ctx env (Var x) =
   case lookup x (ctx++ictx) of
-    Nothing -> throwError(strMsg $ show x++" undefined")
+    Nothing -> throwError(strMsg $ show x++" undefined var")
     Just tysch -> return =<< freshInst tysch
 ti kctx ictx ctx env (Con x) =
   case lookup x ictx of
-    Nothing -> throwError(strMsg $ show x++" undefined")
+    Nothing -> throwError(strMsg $ show x++" undefined con")
     Just tysch -> return =<< freshInst tysch
 ti kctx ictx ctx env e@(In n t)
   | n < 0     = throwError(strMsg $ show e ++ " has negative number")

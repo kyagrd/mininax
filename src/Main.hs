@@ -20,9 +20,9 @@ module Main (
 ) where
 
 import Syntax
-import Infer
-import InferDec
-import Parser
+import Infer hiding (trace)
+import InferDec hiding (trace)
+import Parser hiding (trace)
 
 import Control.Monad
 import Control.Applicative
@@ -37,6 +37,8 @@ import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless (runFreshMT)
 import System.IO
 import Options.Applicative
+import Debug.Trace
+-- trace _ a = a
 
 k :: Kind
 k = [kind| * |]
@@ -194,15 +196,21 @@ greet (CmdArgs{..}) = do
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
-                            printTree(foldr (.) id (map (uncurry subst) u) k)
+                            (renderN 1 . prt 1) (foldr (.) id (map (uncurry subst) u) k)
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
-  mapM_ print (reverse ctx)
+  -- print "================================"
+  -- mapM_ print u
+  -- print "================================"
+  -- mapM_ print (reverse $ (foldr (.) id (map (uncurry subst) u)) kctx)
+  -- print "================================"
+  -- mapM_ print (reverse $ (foldr (.) id (map (uncurry subst) u)) ctx)
+  -- print "================================"
   when (flagAll || flagTi || (not flagKi && not flagEv))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
-                            printTree
+                            (renderN 1 . prt 1)
                             -- (show . ty2Type) 
                                      ( (foldr (.) id (map (uncurry subst) u) )
                                        $ unbindTySch t )
@@ -215,11 +223,22 @@ greet (CmdArgs{..}) = do
 
 
 
+mygr file = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
+                           ,argFilePath=Just file}
+
+mygr2 file = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
+                            ,argFilePath=Just file}
+
+
 mygreet  = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
                           ,argFilePath=Just "../test/test.mininax"}
 
 mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
                           ,argFilePath=Just "../test/test.mininax"}
+
+myPath = mygr "../test/path.mininax"
+myPath2 = mygr2 "../test/path.mininax"
+
 
 
 su1,su2,su3,su4 :: Either UnifyError [(TmName,PSUT)]
