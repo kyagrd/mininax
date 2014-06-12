@@ -167,7 +167,7 @@ tiProg (Prog ds) = (kctx,ictx,u)
             Left errMsg -> error errMsg
             Right (kctx,ictx,u) -> ( [(x,uapply u k) | (x,k) <- kctx]
                                    , [(x,uapply u t) | (x,t) <- ictx]
-                                   , u)
+                                   , u )
 
 evProg (Prog ds) = do
   mapM_ putStrLn
@@ -196,7 +196,10 @@ greet (CmdArgs{..}) = do
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
-                            (renderN 1 . prt 1) (foldr (.) id (map (uncurry subst) u) k)
+                            (renderN 1 . prt 1)
+                            -- (show . ty2Type) 
+                                     ( (foldr (.) id (map (uncurry subst) u) )
+                                       $ unbindSch k )
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
@@ -213,7 +216,7 @@ greet (CmdArgs{..}) = do
                             (renderN 1 . prt 1)
                             -- (show . ty2Type) 
                                      ( (foldr (.) id (map (uncurry subst) u) )
-                                       $ unbindTySch t )
+                                       $ unbindSch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }
@@ -236,8 +239,12 @@ mygreet  = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
 mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
                           ,argFilePath=Just "../test/test.mininax"}
 
-myPath = mygr "../test/path.mininax"
-myPath2 = mygr2 "../test/path.mininax"
+mypath = mygr "../test/path.mininax"
+mypath2 = mygr2 "../test/path.mininax"
+
+myenv = mygr "../test/env.mininax"
+myenv2 = mygr2 "../test/env.mininax"
+
 
 
 

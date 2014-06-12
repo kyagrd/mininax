@@ -84,10 +84,11 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
                                                (Left .  Var <$> fresh "i")
-     let kArgSigsR = [ (x,k) | (x,Right k) <- kArgSigs]
+     -- TODO kind poly??
+     let kArgSigsR = [ (x,bind ([],[],[]) k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,bind [] t) | (x,Left t)  <- kArgSigs]
      mapM (kiDAlt (kArgSigsR ++ kctx) (kArgSigsL ++ ictx) env) dAlts
-     let kctx' = (string2Name tc, foldr KArr Star (map snd kArgSigs)) : kctx
+     let kctx' = (string2Name tc, bind ([],[],[]) $ foldr KArr Star (map snd kArgSigs)) : kctx
      u <- getSubst
      ictx' <- (++ ictx) <$>
                   sequence
@@ -112,10 +113,11 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("tiDec "++tc) $
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
                                                (Left .  Var <$> fresh "i")
+     -- TODO kind poly???
      () <- trace ("kArgSigs = "++show kArgSigs) $ return ()
-     let kArgSigsR = [ (x,k) | (x,Right k) <- kArgSigs]
+     let kArgSigsR = [ (x,bind ([],[],[]) k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,bind [] t) | (x,Left t)  <- kArgSigs]
-     let tcSig = (string2Name tc, foldr KArr (kind2Ki k) (map snd kArgSigs))
+     let tcSig = (string2Name tc, bind ([],[],[]) $ foldr KArr (kind2Ki k) (map snd kArgSigs))
      cSigs <- mapM (kiGAlt tcSig as' (kArgSigsR++kctx) (kArgSigsL++ictx) env)
                    gAlts
      let kctx' = tcSig : kctx
@@ -139,8 +141,8 @@ kiDAlt kctx ictx env (DAlt _ ts) =
      lift $ unifyMany (zip (repeat Star) ks)
   where
 
-kiGAlt :: (TyName, Ki) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI (TmName,Ty)
-kiGAlt (tc,kappa) as kctx ictx env (GAlt (UIdent c) t) =
+kiGAlt :: (TyName, KiSch) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI (TmName,Ty)
+kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
  trace ("kiGAlt "++c++" : "++show ty) $
   do unless (length as < length resTyUnfold)
             (throwError . strMsg $ "need more args for "++show resTyUnfold++" the result type of "++c)
@@ -159,7 +161,7 @@ kiGAlt (tc,kappa) as kctx ictx env (GAlt (UIdent c) t) =
      () <- trace ("fvTmInTy ty' = "++show (fvTmInTy ty'::[TmName])) $ return ()
      () <- trace ("kctx' = "++show kctx') $ return ()
      () <- trace ("ictx' = "++show ictx') $ return ()
-     k <- ki ((tc,kappa):kctx') ictx' env resTy'
+     k <- ki ((tc,kisch):kctx') ictx' env resTy'
      () <- trace ("wwwwww222") $ return ()
      ks <- mapM (ki kctx' ictx' env) ts'
      () <- trace ("wwwwww333") $ return ()
@@ -174,8 +176,8 @@ kiGAlt (tc,kappa) as kctx ictx env (GAlt (UIdent c) t) =
   fvAll = nub (fv ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
   fvTm = nub (fvTmInTy ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
   fvTy = fvAll \\ fvTm
-  freshKi = Var <$> fresh "k"
-  freshTy = (bind [] . Var <$> fresh "a")
+  freshKi = bind ([],[],[]) . Var <$> fresh "k"
+  freshTy = bind [] . Var <$> fresh "a"
 
 evDecs env (Data _ _ _ : ds)       = evDecs env ds
 evDecs env (Gadt _ _ _ _ : ds)     = evDecs env ds

@@ -141,7 +141,7 @@ kind2Ki (KArr (KArgL t1) k2) = S.KArr (Left  $ type2Ty t1) (kind2Ki k2)
 ki2Kind S.Star = KStar
 ki2Kind (S.Var nm) = KVar (LIdent $ show nm)
 ki2Kind (S.KArr (Right k1) k2) = KArr (KArgR $ ki2Kind k1) (ki2Kind k2)
-ki2Kind (S.KArr (Left  t1) k2) = KArr (KArgL $ (trace ("yy "++show t1) ty2Type) t1) (ki2Kind k2)
+ki2Kind (S.KArr (Left  t1) k2) = KArr (KArgL $ ty2Type t1) (ki2Kind k2)
 
 
 type2Ty (TVar (LIdent s)) = S.Var (string2Name s)
@@ -155,7 +155,7 @@ ty2Type (S.Var nm) = TVar (LIdent $ show nm)
 ty2Type (S.TCon nm) = TCon (UIdent $ show nm)
 ty2Type (S.TArr t1 t2) = TArr (ty2Type t1) (ty2Type t2)
 ty2Type (S.TApp t1 (Right t2)) = TApp (ty2Type t1) (TArgR $ ty2Type t2)
-ty2Type (S.TApp t1 (Left  e2)) = TApp (ty2Type t1) (TArgL $ (trace ("zz "++show e2) $ tm2Term) e2)
+ty2Type (S.TApp t1 (Left  e2)) = TApp (ty2Type t1) (TArgL $ tm2Term e2)
 ty2Type (S.TFix t) = TFix (ty2Type t)
 
 

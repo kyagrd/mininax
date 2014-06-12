@@ -161,9 +161,10 @@ unify t1 t2 = mapM_ extendSubst =<< mgu t1 t2
 unifyMany ps = mapM_ extendSubst =<< mguMany ps
 
 
-type KCtx = [(TyName,Ki)]
+type KCtx = [(TyName,KiSch)] -- TODO propagate this change
 type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
 
+type KiSch = Bind ([TmName],[TyName],[KiName]) Ki
 
 ki :: KCtx -> Ctx -> Env -> Ty -> KI Ki
 ki kctx ictx env (Var x)
@@ -172,11 +173,11 @@ ki kctx ictx env (Var x)
 ki kctx ictx env (Var x) =
   case lookup x kctx of
     Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
-    Just k -> return k -- currently just simple kinds
+    Just kisch -> return =<< freshInst kisch -- ki vars should be simple though
 ki kctx ictx env (TCon x) =
   case lookup x kctx of
     Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
-    Just k -> return k -- currently just simple kinds
+    Just kisch -> return =<< freshInst kisch
 ki kctx ictx env (TArr t1 t2) =
   do k1 <- ki kctx ictx env t1
      k2 <- ki kctx ictx env t2
@@ -201,11 +202,19 @@ ki kctx ictx env (TFix t) =
      lift $ unify (KArr (Right k) k) k1
      return k
 
+freshInst sch = liftM snd (unbind sch)
 
-freshInst tysch = liftM snd (unbind tysch)
+{-
+closeKi kctx ctx k = return $ bind freevars ty
+  where
+  freeKvars = nub (fvKi k) \\ (fv ctx ++ fv kctx)
+  freeNonKvars = nub (concatMap fv $ tysInKi k) \\
+                              (fv ctx ++ fv kctx ++ freeKvars)
+  freeTyvars = freeNonKvars \\ freeTmvars
+  freeTmvars = nub (concatMap fvTmInTy $ tysInKi k) \\ (fv ctx ++ fv kctx)
+-}
 
--- closeTy :: KCtx -> Ctx -> Ty -> TySch
-closeTy kctx ctx ty = do
+closeTy kctx ctx ty =
   return $ bind (map Right freeRvars ++ map Left freeLvars) ty
   where
   freevars = nub (fv ty) \\ (fv ctx ++ fv kctx)
@@ -283,7 +292,7 @@ ti kctx ictx ctx env (MIt b) =
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      k <- fresh "k"
-     let kctx' = (r, Var k) : kctx
+     let kctx' = (r, bind ([],[],[]) $ Var k) : kctx
      let ctx' = (f,bind is tyf) : ctx
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
@@ -311,7 +320,7 @@ ti kctx ictx ctx env (MPr b) =
                   foldl TApp (TFix (Var t)) (map eitherVar is)
      let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is)
                   `TArr` tyret
-     let kctx' = (r, Var k) : kctx
+     let kctx' = (r, bind ([],[],[]) $ Var k) : kctx
      let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
@@ -540,7 +549,7 @@ ti' ctx = runTI . ti [] [] [] ctx
 ty = runTI $ ti [] [] [] [] (lam _x x)
 
 
-unbindTySch tsch = snd (unsafeUnbind tsch)
+unbindSch sch = snd (unsafeUnbind sch)
 
 
 -- evaluation
