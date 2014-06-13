@@ -65,11 +65,11 @@ pcons = \x -> \xs -> In 1 (PC x xs) ;
 
 z7 = pcons True (pcons (Pair False True) pnil) ;
 z8 = pcons one (pcons (Pair two three) pnil) ;
-
+kkk = \x -> \y -> x ;
 psum = mit sum {{ a . (a -> Mu N) -> Mu N }}
            { PN      -> \f -> zero
-           ; PC x xs -> \f -> plus (f x)
-                                   (sum xs {Pair a b -> plus (f a) (f b)} )
+           ; PC x xs -> \f -> plus (f x) 
+                                   (sum xs {Pair a b -> plus (f a) (f b)})
            } ;
 
 n7 = psum z8 id ;
@@ -135,5 +135,4 @@ data YY : * -> * where
 -- z10 = { D1 n   -> succ n
 --       ; D2 f x -> x -- must fail
 --       } ;
-
 

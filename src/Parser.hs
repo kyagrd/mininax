@@ -21,7 +21,7 @@
 
 module Parser where
 
-import Language.LBNF
+import Language.LBNF hiding (printTree)
 import Language.LBNF.Runtime (Doc)
 import Unbound.LocallyNameless hiding (Con, Data)
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
@@ -227,13 +227,13 @@ hProg h = pProg <$> hTokens h
 ------------------------------------------------------
 
 -- -- * Overloaded pretty-printer
--- printTree :: Print a => a -> String
--- printTree = render . prt 0
+printTree :: Print a => a -> String
+printTree = render . prt 0
 
 render :: Doc -> String
 render = renderN 0
 
-renderN n d = rend n (map ($ "") $ d []) "  " where
+renderN n d = rend n (map ($ "") $ d []) "" where
   rend i ss = case ss of
     "["      :ts -> showChar '[' . rend i ts
     "("      :ts -> showChar '(' . rend i ts

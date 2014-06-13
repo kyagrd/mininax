@@ -32,9 +32,10 @@ import Control.Monad.Error
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
-import Language.LBNF.Runtime
+import Language.LBNF.Runtime hiding (printTree)
 import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless (runFreshMT)
+import Data.Char
 import System.IO
 import Options.Applicative
 import Debug.Trace
@@ -165,9 +166,7 @@ tiProg (Prog ds) = (kctx,ictx,u)
       = case (runTI $ do { (kctx,ictx,env) <- tiDecs ds ([],[],[])
                            ; u <- getSubst; return (kctx,ictx,u) }) of
             Left errMsg -> error errMsg
-            Right (kctx,ictx,u) -> ( [(x,uapply u k) | (x,k) <- kctx]
-                                   , [(x,uapply u t) | (x,t) <- ictx]
-                                   , u )
+            Right (kctx,ictx,u) -> (kctx,ictx,u)
 
 evProg (Prog ds) = do
   mapM_ putStrLn
@@ -193,30 +192,28 @@ greet (CmdArgs{..}) = do
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
   let (kctx,ctx,u) = tiProg program
+  -- print "================================"
+  -- mapM_ print u
+  -- print "================================"
+  -- mapM_ print (reverse $ kctx)
+  -- print "================================"
+  -- mapM_ print (reverse $ ctx)
+  -- print "================================"
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type) 
-                                     ( (foldr (.) id (map (uncurry subst) u) )
-                                       $ unbindSch k )
+                                     ( unbindSch k )
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
-  -- print "================================"
-  -- mapM_ print u
-  -- print "================================"
-  -- mapM_ print (reverse $ (foldr (.) id (map (uncurry subst) u)) kctx)
-  -- print "================================"
-  -- mapM_ print (reverse $ (foldr (.) id (map (uncurry subst) u)) ctx)
-  -- print "================================"
   when (flagAll || flagTi || (not flagKi && not flagEv))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type) 
-                                     ( (foldr (.) id (map (uncurry subst) u) )
-                                       $ unbindSch t )
+                                     ( unbindSch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }
@@ -244,6 +241,9 @@ mypath2 = mygr2 "../test/path.mininax"
 
 myenv = mygr "../test/env.mininax"
 myenv2 = mygr2 "../test/env.mininax"
+
+mykpoly = mygr "../test/kpoly.mininax"
+mykpoly2 = mygr2 "../test/kpoly.mininax"
 
 
 

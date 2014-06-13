@@ -37,6 +37,7 @@ import Control.Monad.Trans
 import Control.Applicative
 import Generics.RepLib.Unify (subst)
 import Unbound.LocallyNameless ( unbind, bind, fresh, string2Name, aeq, fv )
+import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import qualified Unbound.LocallyNameless as LN
 import GHC.Exts( IsString(..) )
 -- import Debug.Trace
@@ -50,14 +51,12 @@ tiDecs ds = foldl1 (>=>) (map tiDec ds)
 -- it should be only TmName inside { } which can be backquote var
 -- I think current implementation does catch this kind of error eventually
 -- but I expect that the error message would be misterious
-type2Ty' env t = foldr (.) id (map (uncurry LN.subst) env') (type2Ty t)
-               where
-               env' = [(string2Name('`':show x)::TmName,t) | (x,t) <-env]
 
-term2Tm' env t = foldr (.) id (map (uncurry LN.subst) env') (term2Tm t)
-               where
-               env' = [(string2Name('`':show x)::TmName,t) | (x,t) <-env]
+kind2Ki' env = substBackquote env . kind2Ki
 
+type2Ty' env = substBackquote env . type2Ty
+
+term2Tm' env = substBackquote env . term2Tm
 
 
 tiDec :: Dec -> (KCtx,Ctx,Env) -> TI (KCtx,Ctx,Env)
@@ -65,17 +64,16 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env)
   | head x == '`' = throwError(strMsg $ show x++
                                       " backquoted variable not allowed")
 tiDec (Def (LIdent x) t) (kctx,ictx,env) =
-  do ty <- ti kctx ictx [] env (term2Tm' env t)
-           `catchError`
-           (\e -> throwError . strMsg $ e ++ "\n\t"
-                                     ++ "when checking defintion of " ++ x)
+  do () <- trace ("Def "++ show x++" ********************") $ return ()
+     let tm = term2Tm' env t
+     ty <- ti kctx ictx [] env tm
+           `catchErrorThrowWithMsg`
+              (++ "\n\t" ++ "when checking defintion of " ++ x)
      u <- getSubst
-     tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx) (foldr (.) id (map (uncurry subst) u) ty)
+     tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx) (uapply u ty)
      let ictx' = (string2Name x, tysch) : ictx
-         env'  = ( string2Name x -- lambda lifting (make all global def closed)
-                 , foldr (.) id (map (uncurry subst) env) (term2Tm t) ) : env
+         env'  = (string2Name x, envApply env tm) : env
      return (kctx,ictx',env')
-
 tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
   do kArgSigs <- sequence $
                    do i <- is -- list monad
@@ -84,21 +82,24 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
                                                (Left .  Var <$> fresh "i")
-     -- TODO kind poly??
-     let kArgSigsR = [ (x,bind ([],[],[]) k) | (x,Right k) <- kArgSigs]
-     let kArgSigsL = [ (x,bind [] t) | (x,Left t)  <- kArgSigs]
+     let kArgSigsR = [ (x,monoKi k) | (x,Right k) <- kArgSigs]
+     let kArgSigsL = [ (x,monoTy t) | (x,Left t)  <- kArgSigs]
      mapM (kiDAlt (kArgSigsR ++ kctx) (kArgSigsL ++ ictx) env) dAlts
-     let kctx' = (string2Name tc, bind ([],[],[]) $ foldr KArr Star (map snd kArgSigs)) : kctx
      u <- getSubst
+     tcSig <- (,) (string2Name tc) <$>
+                  closeKi kctx ictx []
+                     (uapply u $ foldr KArr Star (map snd kArgSigs))
+     let kctx' = tcSig : kctx
      ictx' <- (++ ictx) <$>
                   sequence
                     [ (,) (string2Name c) <$>
-                          closeTy kctx' (filter (isUpper.head.show.fst) ictx)
-                             (foldr (.) id (map (uncurry subst) u) 
-                                    (foldr TArr retTy $ map (type2Ty' env) ts))
+                          closeTy kctx' ictx_upper
+                             (uapply u $
+                                    foldr TArr retTy (map (type2Ty' env) ts))
                      | DAlt (UIdent c) ts <- dAlts ] 
      return (kctx',ictx',env)
   where
+  ictx_upper = filter (isUpper.head.show.fst) ictx
   retTy = foldl TApp (TCon(string2Name tc)) $
                      do i <- is -- list monad
                         return $ case i of
@@ -113,24 +114,31 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("tiDec "++tc) $
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
                                                (Left .  Var <$> fresh "i")
-     -- TODO kind poly???
      () <- trace ("kArgSigs = "++show kArgSigs) $ return ()
-     let kArgSigsR = [ (x,bind ([],[],[]) k) | (x,Right k) <- kArgSigs]
-     let kArgSigsL = [ (x,bind [] t) | (x,Left t)  <- kArgSigs]
-     let tcSig = (string2Name tc, bind ([],[],[]) $ foldr KArr (kind2Ki k) (map snd kArgSigs))
+     let kArgSigsR = [ (x,monoKi k) | (x,Right k) <- kArgSigs]
+     let kArgSigsL = [ (x,monoTy t) | (x,Left t)  <- kArgSigs]
+     u <- getSubst
+     tcSig <- (,) (string2Name tc) <$>
+                  closeKi kctx ictx_upper (fv kArgSigs)
+                     (uapply u $ foldr KArr (kind2Ki' env k) (map snd kArgSigs))
      cSigs <- mapM (kiGAlt tcSig as' (kArgSigsR++kctx) (kArgSigsL++ictx) env)
                    gAlts
-     let kctx' = tcSig : kctx
+     u <- getSubst
+     tcSig' <- (,) (fst tcSig) <$>
+                   closeKi kctx_upper ictx_upper (fv kArgSigs)
+                      (uapply u $ (snd $ unsafeUnbind $ snd tcSig) )
+     let kctx' = tcSig' : kctx
      u <- getSubst
      ictx' <- (++ ictx) <$> 
                   sequence
                     [ (,) c <$>
                             closeTy kctx' (filter (isUpper.head.show.fst) ictx)
-                                    (foldr (.) id (map (uncurry subst) u) ty)
+                                    (uapply u ty)
                      | (c,ty) <- cSigs ]
-     trace ("wwwwww") $ return ()
      return (kctx',ictx',env)
   where
+  kctx_upper = filter (isUpper.head.show.fst) kctx
+  ictx_upper = filter (isUpper.head.show.fst) ictx
   as' = do i <- as
            return $ case i of IVarR(LIdent a) -> Right $ Var (string2Name a)
                               IVarL(LIdent a) -> Left  $ Var (string2Name a)
@@ -143,7 +151,7 @@ kiDAlt kctx ictx env (DAlt _ ts) =
 
 kiGAlt :: (TyName, KiSch) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI (TmName,Ty)
 kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
- trace ("kiGAlt "++c++" : "++show ty) $
+ trace ("kiGAlt "++c++" : "++show ty ++"\n\t"++show tc++" : "++show kisch) $
   do unless (length as < length resTyUnfold)
             (throwError . strMsg $ "need more args for "++show resTyUnfold++" the result type of "++c)
      unless (and (zipWith aeq (Right(TCon tc) : as) resTyUnfold))
@@ -166,6 +174,8 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
      ks <- mapM (ki kctx' ictx' env) ts'
      () <- trace ("wwwwww333") $ return ()
      lift $ unifyMany (zip (repeat Star) (k:ks))
+     u <- getSubst
+     -- () <- trace ("u = "++show u) $ return ()
      () <- trace ("wwwwww444") $ return ()
      return (string2Name c, ty')
   where
@@ -176,8 +186,8 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
   fvAll = nub (fv ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
   fvTm = nub (fvTmInTy ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
   fvTy = fvAll \\ fvTm
-  freshKi = bind ([],[],[]) . Var <$> fresh "k"
-  freshTy = bind [] . Var <$> fresh "a"
+  freshKi = monoKi . Var <$> fresh "k"
+  freshTy = monoTy . Var <$> fresh "a"
 
 evDecs env (Data _ _ _ : ds)       = evDecs env ds
 evDecs env (Gadt _ _ _ _ : ds)     = evDecs env ds

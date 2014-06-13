@@ -1,3 +1,4 @@
+-- vim: sw=2: ts=2: expandtab: syntax=haskell:
 data P x r : {v} -> {v} -> * where
   { PNil    : P x r {i} {i}
   ; PCons   : x {i} {j} -> r {j} {k} -> P x r {i} {k}
@@ -69,25 +70,34 @@ eval =  mit ev {{ {t} . Val {t} }}
           ; IF e0 e1 e2 ->  ifV (ev e0) (ev e1) (ev e2)
           } ;
 
--- TODO need kind polymorphism TODO
+
+-- data L a r = N | C a r ;
+-- nil = In 0 N ;
+-- cons = \x -> \xs -> In 0 (C x xs) ;
+
+
 data Instr  r : { Mu(P(Elem Ty)){U}{U} } -> { Mu(P(Elem Ty)){U}{U} } -> * where
+-- data Instr  r : {Mu(L Ty)} -> {Mu(L Ty)} -> * where
   { PUSH   : Val {t} -> Instr r {ts} {`cons t ts}
   ; ADD    : Instr r {`cons I (`cons I ts)} {`cons I ts}
-  -- ; IFPOP  : Mu(P r) {ts} {ts'} -> -- TODO this should work but not working
-  --            Mu(P r) {ts} {ts'} ->
-  --            Instr r {`cons B ts} {ts'}
+  ; IFPOP  : Mu(P r) {ts} {ts'} ->
+             Mu(P r) {ts} {ts'} ->
+             Instr r {`cons B ts} {ts'}
   } ;
 
 pUSH = \n -> In 2 (PUSH n);
 aDD = In 2 ADD ;
--- iFPOP = \n -> \m -> In 2 (IFPOP n m) ; -- TODO when IFPOP works
+iFPOP = \n -> \m -> In 2 (IFPOP n m) ;
 
 -- synonym  Code {sc} {sc'} = Path Inst {sc} {sc'}
+
+tt = \c1 -> \c2 -> append (append c1 c2) (pCons aDD pNil) ;
 
 compile =
   mit cmpl {{ {t} . Mu(P(Mu Instr)) {ts} {`cons t ts} }}
     { VAL v       -> pCons (pUSH v) pNil
-    -- ; PLUS e1 e2  -> append (append (cmpl e1) (cmpl e2)) (pCons aDD pNil) -- TODO this should be working but not (do we need kind poly???)
-    -- ; IF e0 e1 e2 -> append (cmpl e0) (pCons  (iFPOP (cmpl e1) (cmpl e2)) pNil) -- TODO when IFPOP works
+    -- -- TODO PLUS case should be working but not. Why?
+    ; PLUS e1 e2  -> append (append (cmpl e1) (cmpl e2)) (pCons aDD pNil)
+    ; IF e0 e1 e2 -> append (cmpl e0) (pCons  (iFPOP (cmpl e1) (cmpl e2)) pNil)
     } ;
 
