@@ -22,7 +22,7 @@ data Elem a : {Unit} -> {Unit} -> * where
 -- synonym List a = Path (Elem a) {U} {U}
  
 nil = pNil ;
-cons = \x -> pCons (MkElem x) ;
+cons = \x -> \xs -> pCons (MkElem x) xs;
 
 
 data Bool = False | True ;
@@ -96,7 +96,6 @@ tt = \c1 -> \c2 -> append (append c1 c2) (pCons aDD pNil) ;
 compile =
   mit cmpl {{ {t} . Mu(P(Mu Instr)) {ts} {`cons t ts} }}
     { VAL v       -> pCons (pUSH v) pNil
-    -- -- TODO PLUS case should be working but not. Why?
     ; PLUS e1 e2  -> append (append (cmpl e1) (cmpl e2)) (pCons aDD pNil)
     ; IF e0 e1 e2 -> append (cmpl e0) (pCons  (iFPOP (cmpl e1) (cmpl e2)) pNil)
     } ;

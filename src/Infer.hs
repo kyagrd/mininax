@@ -24,7 +24,7 @@ import Control.Monad.State
 import Language.LBNF.Runtime
 import Parser (ty2Type)
 import Generics.RepLib.Unify hiding (solveUnification)
-import Unbound.LocallyNameless hiding (subst, Con)
+import Unbound.LocallyNameless hiding (subst, Con, union)
 import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
@@ -165,7 +165,8 @@ extendSubst (x,t) =
        Just t' -> unify t t' >> extendSubstitution (x,t)
 
 
-unify t1 t2 = trace ("unify ("++show t1++") ("++show t2++")") (mapM_ extendSubst =<< mgu t1 t2)
+unify t1 t2 = trace ("unify ("++show t1++") ("++show t2++")")
+                (mapM_ extendSubst =<< mgu t1 t2)
 
 unifyMany ps = mapM_ extendSubst =<< mguMany ps
 
@@ -305,6 +306,8 @@ ti kctx ictx ctx env e@(In n t)
   | n < 0     = throwError(strMsg $ show e ++ " has negative number")
   | otherwise =
     do ty <- ti kctx ictx ctx env t
+              `catchErrorThrowWithMsg`
+                 (++ "\n\t" ++ "when checking type of " ++ show t)
        let m = fromInteger n
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
@@ -326,7 +329,12 @@ ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      k <- fresh "k"
      let kctx' = (r, monoKi $ Var k) : kctx
-     let ctx' = (f,bind is tyf) : ctx
+     tyfsch <- case mphi' of
+                 Nothing -> return (monoTy tyf)
+                 _       -> do (vs,_) <- unsafeUnbind <$>
+                                           closeTy kctx' ictx tyret
+                               return $ bind (union is vs) tyf
+     let ctx' = (f,tyfsch) : ctx
      () <- trace ("\tkctx' = "++show kctx') $ return ()
      () <- trace ("\tctx' = "++show ctx') $ return ()
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
@@ -352,7 +360,12 @@ ti kctx ictx ctx env (MPr b) =
      let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is)
                   `TArr` tyret
      let kctx' = (r, bind ([],[],[]) $ Var k) : kctx
-     let ctx' = (f,bind is tyf) : (cast,bind is tycast) : ctx
+     tyfsch <- case mphi' of
+                 Nothing -> return (monoTy tyf)
+                 _       -> do (vs,_) <- unsafeUnbind <$>
+                                           closeTy kctx' ictx tyret
+                               return $ bind (union is vs) tyf
+     let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
      u <- getSubst
@@ -370,16 +383,22 @@ ti kctx ictx ctx env (Lam b) =
 ti kctx ictx ctx env (App t1 t2) =
   do ty1 <- ti kctx ictx ctx env t1
              `catchErrorThrowWithMsg`
-                 (++ "\n\t" ++ "when checking type of " ++ show t1)
+                (++ "\n\t" ++ "when checking type of " ++ show t1)
      ty2 <- ti kctx ictx ctx env t2
              `catchErrorThrowWithMsg`
-                 (++ "\n\t" ++ "when checking type of " ++ show t1)
+                (++ "\n\t" ++ "when checking type of " ++ show t2
+                 ++ "\n" ++ "kctx = " ++ show kctx
+                 ++ "\n" ++ "ictx = " ++ show ictx
+                 ++ "\n" ++ "ctx = " ++ show ctx
+                )
      ty <- Var <$> fresh "a"
      lift $ unify (TArr ty2 ty) ty1
      return ty
 ti kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
      ty <- ti kctx ictx ctx env t1
+            `catchErrorThrowWithMsg`
+               (++ "\n\t" ++ "when checking type of " ++ show t1)
      u <- getSubst
      tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
      ti kctx ictx ((x, tysch) : ctx) env t2
@@ -499,14 +518,14 @@ tiAlt kctx ictx ctx env mphi (x,b) =
      let ctx' = trace (show ns ++", "++ show xtyArgs') $ zip ns (map monoTy xtyArgs') ++ ctx
      () <- trace "zzaaa" $ return ()
      domty <- ti kctx' ictx' ctx' env (foldl1 App (Con x : map Var ns))
-               `catchErrorThrowWithMsg`
-                 (++ "\n\t" ++ "when checking type of " ++ show (foldl1 App (Con x : map Var ns)))
-
+              `catchErrorThrowWithMsg`
+                 (++ "\n\t" ++ "when checking type of "
+                  ++ show (foldl1 App (Con x : map Var ns)))
      rngty <- ti kctx' ictx' ctx' env t
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of " ++ show t)
      () <- trace ("zzaaa2\t"++show xtyRet++" =?= "++show domty) $ return ()
-     lift $ trace "aaaaaa" $ unify xtyRet (trace "AAAA " domty)
+     lift $ unify xtyRet domty
      () <- trace "zzaaa3" $ return ()
      u <- getSubst
      case mt of

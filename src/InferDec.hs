@@ -43,6 +43,7 @@ import GHC.Exts( IsString(..) )
 -- import Debug.Trace
 trace _ a = a
 
+-- TODO raise error when tring to generalize undefined Con or TCon names
 -- TODO check uniqueness of TCon and Con names (not yet checking uniqueness?)
 
 tiDecs ds = foldl1 (>=>) (map tiDec ds)
@@ -63,9 +64,8 @@ tiDec :: Dec -> (KCtx,Ctx,Env) -> TI (KCtx,Ctx,Env)
 tiDec (Def (LIdent x) t) (kctx,ictx,env)
   | head x == '`' = throwError(strMsg $ show x++
                                       " backquoted variable not allowed")
-tiDec (Def (LIdent x) t) (kctx,ictx,env) =
-  do () <- trace ("Def "++ show x++" ********************") $ return ()
-     let tm = term2Tm' env t
+tiDec (Def (LIdent x) t) (kctx,ictx,env) =trace ("\nDef "++ show x++" *****") $
+  do let tm = term2Tm' env t
      ty <- ti kctx ictx [] env tm
            `catchErrorThrowWithMsg`
               (++ "\n\t" ++ "when checking defintion of " ++ x)
@@ -74,7 +74,7 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env) =
      let ictx' = (string2Name x, tysch) : ictx
          env'  = (string2Name x, envApply env tm) : env
      return (kctx,ictx',env')
-tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
+tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
   do kArgSigs <- sequence $
                    do i <- is -- list monad
                       return $ case i of
@@ -106,7 +106,7 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
                           IVarR(LIdent a) -> Right $ Var(string2Name a)
                           IVarL(LIdent a) -> Left  $ Var(string2Name a)
 
-tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("tiDec "++tc) $
+tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
   do kArgSigs <- sequence $
                    do i <- as -- list monad
                       return $ case i of
@@ -153,9 +153,10 @@ kiGAlt :: (TyName, KiSch) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI (TmNa
 kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
  trace ("kiGAlt "++c++" : "++show ty ++"\n\t"++show tc++" : "++show kisch) $
   do unless (length as < length resTyUnfold)
-            (throwError . strMsg $ "need more args for "++show resTyUnfold++" the result type of "++c)
+       (throwError . strMsg $
+          "need more args for "++show resTyUnfold++" the result type of "++c)
      unless (and (zipWith aeq (Right(TCon tc) : as) resTyUnfold))
-            (throwError . strMsg $ "result type param args not uniform in "++c)
+       (throwError . strMsg $ "result type param args not uniform in "++c)
      -- must freshen names to avoid name collision
      -- e.g. (a,k) in kctx can collide if there are k in (fv ty)
      (_,ty') <- unbind $ bind fvAll ty
@@ -170,6 +171,8 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
      () <- trace ("kctx' = "++show kctx') $ return ()
      () <- trace ("ictx' = "++show ictx') $ return ()
      k <- ki ((tc,kisch):kctx') ictx' env resTy'
+          `catchErrorThrowWithMsg`
+             (++ "\n\t" ++ "when checking kind of resTy' " ++ show resTy')
      () <- trace ("wwwwww222") $ return ()
      ks <- mapM (ki kctx' ictx' env) ts'
      () <- trace ("wwwwww333") $ return ()
