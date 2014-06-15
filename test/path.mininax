@@ -76,8 +76,8 @@ eval =  mit ev {{ {t} . Val {t} }}
 -- cons = \x -> \xs -> In 0 (C x xs) ;
 
 
-data Instr  r : { Mu(P(Elem Ty)){U}{U} } -> { Mu(P(Elem Ty)){U}{U} } -> * where
 -- data Instr  r : {Mu(L Ty)} -> {Mu(L Ty)} -> * where
+data Instr  r : { Mu(P(Elem Ty)){U}{U} } -> { Mu(P(Elem Ty)){U}{U} } -> * where
   { PUSH   : Val {t} -> Instr r {ts} {`cons t ts}
   ; ADD    : Instr r {`cons I (`cons I ts)} {`cons I ts}
   ; IFPOP  : Mu(P r) {ts} {ts'} ->

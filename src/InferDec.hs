@@ -70,7 +70,8 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env) =trace ("\nDef "++ show x++" *****") $
            `catchErrorThrowWithMsg`
               (++ "\n\t" ++ "when checking defintion of " ++ x)
      u <- getSubst
-     tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx) (uapply u ty)
+     tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx)
+                  =<< norm env (uapply u ty)
      let ictx' = (string2Name x, tysch) : ictx
          env'  = (string2Name x, envApply env tm) : env
      return (kctx,ictx',env')
@@ -87,15 +88,15 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
      mapM (kiDAlt (kArgSigsR ++ kctx) (kArgSigsL ++ ictx) env) dAlts
      u <- getSubst
      tcSig <- (,) (string2Name tc) <$>
-                  closeKi kctx ictx []
-                     (uapply u $ foldr KArr Star (map snd kArgSigs))
+                  (closeKi kctx ictx [] =<<
+                     norm env (uapply u $ foldr KArr Star (map snd kArgSigs)))
      let kctx' = tcSig : kctx
      ictx' <- (++ ictx) <$>
                   sequence
                     [ (,) (string2Name c) <$>
-                          closeTy kctx' ictx_upper
-                             (uapply u $
-                                    foldr TArr retTy (map (type2Ty' env) ts))
+                          (closeTy kctx' ictx_upper =<<
+                             (norm env $ uapply u $
+                                   foldr TArr retTy (map (type2Ty' env) ts)) )
                      | DAlt (UIdent c) ts <- dAlts ] 
      return (kctx',ictx',env)
   where
@@ -125,15 +126,15 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
                    gAlts
      u <- getSubst
      tcSig' <- (,) (fst tcSig) <$>
-                   closeKi kctx_upper ictx_upper (fv kArgSigs)
-                      (uapply u $ (snd $ unsafeUnbind $ snd tcSig) )
+                   (closeKi kctx_upper ictx_upper (fv kArgSigs)
+                     =<< norm env (uapply u $ (snd $ unsafeUnbind $ snd tcSig)))
      let kctx' = tcSig' : kctx
      u <- getSubst
      ictx' <- (++ ictx) <$> 
                   sequence
                     [ (,) c <$>
-                            closeTy kctx' (filter (isUpper.head.show.fst) ictx)
-                                    (uapply u ty)
+                            (closeTy kctx' (filter (isUpper.head.show.fst) ictx)
+                                 =<< norm env (uapply u ty) )
                      | (c,ty) <- cSigs ]
      return (kctx',ictx',env)
   where

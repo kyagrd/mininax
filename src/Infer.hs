@@ -664,6 +664,15 @@ ev env (Let b) = do ((x, Embed t1), t2) <- unbind b
 ev env v@(Alt _ _) = return v
 
 
+
+norm env Star = return Star
+norm env (KArr (Right k1) k2) = KArr <$> (Right <$> norm env k1) <*> norm env k2
+norm env (KArr (Left  t1) k2) = KArr <$> (Left  <$> norm env t1) <*> norm env k2
+norm env t@(TCon _) = return t
+norm env (TArr t1 t2) = TArr <$> norm env t1 <*> norm env t2
+norm env (TApp t1 (Right t2)) = TApp <$> norm env t1 <*> (Right <$> norm env t2)
+norm env (TApp t1 (Left  e2)) = TApp <$> norm env t1 <*> (Left  <$> norm env e2)
+norm env (TFix t) = TFix <$> norm env t
 norm env v@(Var x)
   | head(show x) == '`' = throwError(strMsg $ show x++
                                      " backquoted variable not allowed (norm)")
