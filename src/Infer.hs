@@ -1,5 +1,5 @@
 -- vim: sw=2: ts=2: set expandtab:
-{-# LANGUAGE TemplateHaskell,
+{-# LANGUAGE CPP, TemplateHaskell,
              MultiParamTypeClasses,
              FlexibleInstances,
              FlexibleContexts,
@@ -8,10 +8,12 @@
              OverloadedStrings,
              GADTs,
              NoMonomorphismRestriction,
-             ScopedTypeVariables,
-             CPP #-}
+             ScopedTypeVariables
+  #-}
 
 module Infer where
+
+#include "macros.h"
 
 import Syntax
 
@@ -129,10 +131,6 @@ solveUnification (eqs :: [(PSUT, PSUT)]) =
 runEither (Right a) = a
 runEither (Left b) = error b
 -}
-
--- Don't know why but sometimes have to manually inline this.
--- Myabe because of some dictionary passing craziness on subst???
-uapply = foldr (.) id . map (uncurry subst) . reverse
 
 envApply env = foldr (.) id (map (uncurry LN.subst) env)
 
@@ -337,7 +335,7 @@ ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
      u <- getSubst
-     let ty = (foldr (.) id . map (uncurry subst) . reverse) u $
+     let ty = uapply u $
                 foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
      when (r `elem` fv ty) (throwError . strMsg $
              "abstract type variable "++show r++" cannot escape in type "++
@@ -366,7 +364,7 @@ ti kctx ictx ctx env (MPr b) =
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
      lift $ unify tytm tytm'
      u <- getSubst
-     let ty = (foldr (.) id . map (uncurry subst) . reverse) u $
+     let ty = uapply u $
                 foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
      when (r `elem` fv ty) (throwError . strMsg $
              "abstract type variable "++show r++" cannot escape in type "++
@@ -397,7 +395,7 @@ ti kctx ictx ctx env (Let b) =
             `catchErrorThrowWithMsg`
                (++ "\n\t" ++ "when checking type of " ++ show t1)
      u <- getSubst
-     tysch <- closeTy kctx (ictx++ctx) ((foldr (.) id . map (uncurry subst) . reverse) u ty)
+     tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
      ti kctx ictx ((x, tysch) : ctx) env t2
 ti kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
 ti kctx ictx ctx env e@(Alt Nothing as) = tiAlts kctx ictx ctx env e
@@ -414,7 +412,7 @@ tiAlts kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
   do tys <- mapM (tiAlt kctx ictx ctx env (Just phi)) as
      u <- getSubst
      let (Right tcon : args) =
-            tApp2list $ case (head tys) of TArr t _ -> (foldr (.) id . map (uncurry subst) . reverse) u t
+            tApp2list $ case (head tys) of TArr t _ -> uapply u t
      (is, rngty) <- unbind (substBackquote env phi)
      when (1 + length is > length args)
         $ throwError(strMsg $ "too many indices in "++show phi)
@@ -460,7 +458,7 @@ tiAlt kctx ictx ctx env mphi (x,b) =
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
                  Just xt -> freshInst xt
      u <- trace ("++++++++"++show x++"++++++++++++++\n"++show mphi++"\n xTy = "++show xTy) $ getSubst
-     let xty = (foldr (.) id . map (uncurry subst) . reverse) u xTy
+     let xty = uapply u xTy
      let xtyUnfold = unfoldTArr xty
      let (xtyArgs, xtyRet) = (init xtyUnfold, last xtyUnfold)
      (u,is,bodyTy,mt) <- case trace (show(xty,xtyRet,mphi)) mphi of
@@ -470,9 +468,9 @@ tiAlt kctx ictx ctx env mphi (x,b) =
           t <- (Var <$> fresh "t")
           lift $ unify (foldl TApp t $ map eitherVar is) xtyRet
           u <- getSubst
-          let bodyTy' = (foldr (.) id . map (uncurry subst) . reverse) u bodyTy
+          let bodyTy' = uapply u bodyTy
           return (u,is,bodyTy',Just t)
-     let xty_ = (foldr (.) id . map (uncurry subst) . reverse) u xty
+     let xty_ = uapply u xty
      let xty = case trace ("xty_ = "++show xty_) () of _ -> xty_
      let xtyUnfold = unfoldTArr xty
      let (xtyArgs, xtyRet) = (init xtyUnfold, last xtyUnfold)
@@ -533,7 +531,7 @@ tiAlt kctx ictx ctx env mphi (x,b) =
                    lift $ unify bodyTy' rngty
      u <- getSubst
      () <- trace "zzaaa5" $ return ()
-     let ty = (foldr (.) id . map (uncurry subst) . reverse) u (TArr domty rngty)
+     let ty = uapply u (TArr domty rngty)
      let TArr domty rngty = ty
      let eRetVars = intersect (eTyVars ++ eTmVars) (fv ty)
      unless (trace (show(ty,eRetVars)) $ null eRetVars)
@@ -567,9 +565,9 @@ tiAlt kctx ictx ctx env mphi (x,b) =
                          "\n\t"++ show(eTyVars++eTmVars)++" of "++show xtyRet
                                ++ show(fv xtyRet::[TyName])++" in "++show (x,b))
                         mt
-         let t' = (foldr (.) id . map (uncurry subst) . reverse) u t
+         let t' = uapply u t
          (is,bodyTy) <- unbind phi
-         let bodyTy' = (foldr (.) id . map (uncurry subst) . reverse) u bodyTy
+         let bodyTy' = uapply u bodyTy
          return (foldl TApp t' (map eitherVar is) `TArr` bodyTy')
   -- catching error from do ...
   `catchErrorThrowWithMsg` (++ "\n\t" ++ "when checking case " ++ show x)
@@ -589,7 +587,7 @@ nullState = UState [] []
 
 runUS = runUSwith nullState
 
-runUSwith st0 st = (foldr (.) id . map (uncurry subst) . reverse) (uSubst s) e where (e,s) = runState st st0
+runUSwith st0 st = uapply (uSubst s) e where (e,s) = runState st st0
 
 
 runTI = runTIwith nullState
@@ -611,9 +609,6 @@ monoTy = bind []
 type Env = [(TmName,Tm)]
 
 sreturn env t = return $ foldr (.) id (map (uncurry LN.subst) env) t
-
-
-
 
 ev env (Var x)
   | head(show x) == '`' = throwError(strMsg $ show x++

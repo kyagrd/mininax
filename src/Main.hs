@@ -15,9 +15,9 @@
 --
 -----------------------------------------------------------------------------
 
-module Main (
-    main
-) where
+module Main where
+
+#include "macros.h"
 
 import Syntax
 import Infer hiding (trace)
@@ -38,8 +38,8 @@ import Unbound.LocallyNameless (runFreshMT)
 import Data.Char
 import System.IO
 import Options.Applicative
-import Debug.Trace
--- trace _ a = a
+-- import Debug.Trace
+trace _ a = a
 
 k :: Kind
 k = [kind| * |]
@@ -203,9 +203,8 @@ greet (CmdArgs{..}) = do
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
-                            -- (show . ty2Type) 
-                               (foldr (.) id (map (uncurry subst) $ reverse u)
-                                  $ unbindSch k )
+                            -- (show . ty2Type)
+                               (uapply u $ unbindSch k )
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
@@ -213,9 +212,8 @@ greet (CmdArgs{..}) = do
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
-                            -- (show . ty2Type) 
-                               (foldr (.) id (map (uncurry subst) $ reverse u)
-                                  $ unbindSch t )
+                            -- (show . ty2Type)
+                               (uapply u $ unbindSch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }

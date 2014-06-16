@@ -1,5 +1,5 @@
 name: mininax
-version: 0.0.1
+version: 0.1.0
 cabal-version: >=1.2
 build-type: Simple
 license: AllRightsReserved
@@ -13,7 +13,10 @@ description: Minimal implementation of the Nax programming language without term
 category: Language
 author: Ki Yung Ahn
 data-dir: ""
-extra-source-files: /home/kyagrd/cscs/mininax/test/test.mininax
+extra-source-files: /home/kyagrd/cscs/mininax/src/macros.h
+                    /home/kyagrd/cscs/mininax/test/env.mininax
+                    /home/kyagrd/cscs/mininax/test/path.mininax
+                    /home/kyagrd/cscs/mininax/test/test.mininax
  
 executable mininax
     build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
@@ -21,9 +24,10 @@ executable mininax
                    unbound -any
     main-is: Main.hs
     buildable: True
+    build-tools: cpphs -any
     hs-source-dirs: src
     other-modules: Syntax InferDec Infer Parser
-    ghc-options: -Wall
+    ghc-options: -Wall -O2 -cpp -pgmPcpphs -optP--cpp
  
 test-suite test-mininax
     build-depends: BNFC-meta -any, QuickCheck -any, RepLib -any,
@@ -32,5 +36,7 @@ test-suite test-mininax
     type: exitcode-stdio-1.0
     main-is: Main.hs
     buildable: True
+    build-tools: cpphs -any
     cpp-options: -DMAIN_FUNCTION=testMain
     hs-source-dirs: src
+    other-modules: Syntax InferDec Infer Parser
