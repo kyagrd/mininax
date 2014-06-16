@@ -102,6 +102,10 @@ vapp = mit app {{ {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }}
             ; VC x xs -> \ys -> vcons x (app xs ys)
             } ;
 
+n15 = vlength v2 ;
+v3 = vapp v2 v1 ;
+v4 = vmap succ v3 ;
+
 -- vapp1 = mit app {{ {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }}
 --             { VN      -> \ys -> vnil -- must fail
 --             ; VC x xs -> \ys -> vcons x (app xs ys)

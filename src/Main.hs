@@ -192,13 +192,13 @@ greet (CmdArgs{..}) = do
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
   let (kctx,ctx,u) = tiProg program
-  print "================================"
-  mapM_ print u
-  print "================================"
-  mapM_ print (reverse $ kctx)
-  print "================================"
-  mapM_ print (reverse $ ctx)
-  print "================================"
+  -- print "================================"
+  -- mapM_ print u
+  -- print "================================"
+  -- mapM_ print (reverse $ kctx)
+  -- print "================================"
+  -- mapM_ print (reverse $ ctx)
+  -- print "================================"
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
@@ -244,8 +244,8 @@ mypath2 = mygr2 "../test/path.mininax"
 myenv = mygr "../test/env.mininax"
 myenv2 = mygr2 "../test/env.mininax"
 
-mykpoly = mygr "../test/kpoly.mininax"
-mykpoly2 = mygr2 "../test/kpoly.mininax"
+mytmp = mygr "../test/tmp.mininax"
+mytmp2 = mygr2 "../test/tmp.mininax"
 
 
 

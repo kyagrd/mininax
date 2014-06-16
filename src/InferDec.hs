@@ -4,7 +4,8 @@
              MultiParamTypeClasses,
              FlexibleContexts,
              UndecidableInstances,
-             OverloadedStrings
+             OverloadedStrings,
+             CPP
     #-}
 -----------------------------------------------------------------------------
 --
@@ -71,7 +72,7 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env) =trace ("\nDef "++ show x++" *****") $
               (++ "\n\t" ++ "when checking defintion of " ++ x)
      u <- getSubst
      tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx)
-                  =<< norm env (uapply u ty)
+                  =<< norm env ((foldr (.) id . map (uncurry subst) . reverse) u ty)
      let ictx' = (string2Name x, tysch) : ictx
          env'  = (string2Name x, envApply env tm) : env
      return (kctx,ictx',env')
@@ -89,15 +90,15 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
      u <- getSubst
      tcSig <- (,) (string2Name tc) <$>
                   (closeKi kctx ictx [] =<<
-                     norm env (uapply u $ foldr KArr Star (map snd kArgSigs)))
+                     norm env ((foldr (.) id . map (uncurry subst) . reverse) u $ foldr KArr Star (map snd kArgSigs)))
      let kctx' = tcSig : kctx
      ictx' <- (++ ictx) <$>
                   sequence
                     [ (,) (string2Name c) <$>
                           (closeTy kctx' ictx_upper =<<
-                             (norm env $ uapply u $
+                             (norm env $ (foldr (.) id . map (uncurry subst) . reverse) u $
                                    foldr TArr retTy (map (type2Ty' env) ts)) )
-                     | DAlt (UIdent c) ts <- dAlts ] 
+                     | DAlt (UIdent c) ts <- reverse dAlts ] 
      return (kctx',ictx',env)
   where
   ictx_upper = filter (isUpper.head.show.fst) ictx
@@ -121,21 +122,21 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
      u <- getSubst
      tcSig <- (,) (string2Name tc) <$>
                   closeKi kctx ictx_upper (fv kArgSigs)
-                     (uapply u $ foldr KArr (kind2Ki' env k) (map snd kArgSigs))
+                     ((foldr (.) id . map (uncurry subst) . reverse) u $ foldr KArr (kind2Ki' env k) (map snd kArgSigs))
      cSigs <- mapM (kiGAlt tcSig as' (kArgSigsR++kctx) (kArgSigsL++ictx) env)
                    gAlts
      u <- getSubst
      tcSig' <- (,) (fst tcSig) <$>
                    (closeKi kctx_upper ictx_upper (fv kArgSigs)
-                     =<< norm env (uapply u $ (snd $ unsafeUnbind $ snd tcSig)))
+                     =<< norm env ((foldr (.) id . map (uncurry subst) . reverse) u $ (snd $ unsafeUnbind $ snd tcSig)))
      let kctx' = tcSig' : kctx
      u <- getSubst
      ictx' <- (++ ictx) <$> 
                   sequence
                     [ (,) c <$>
                             (closeTy kctx' (filter (isUpper.head.show.fst) ictx)
-                                 =<< norm env (uapply u ty) )
-                     | (c,ty) <- cSigs ]
+                                 =<< norm env ((foldr (.) id . map (uncurry subst) . reverse) u ty) )
+                     | (c,ty) <- reverse cSigs ]
      return (kctx',ictx',env)
   where
   kctx_upper = filter (isUpper.head.show.fst) kctx

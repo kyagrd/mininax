@@ -3,7 +3,8 @@
              FlexibleInstances,
              MultiParamTypeClasses,
              FlexibleContexts,
-             UndecidableInstances
+             UndecidableInstances,
+             CPP
   #-}
 -----------------------------------------------------------------------------
 --
