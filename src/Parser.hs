@@ -65,14 +65,14 @@ Var.    Term3 ::= LIdent ;
 Con.    Term3 ::= UIdent ;
 In .    Term2 ::= "In" Integer Term3 ;
 MIt.    Term2 ::= "mit" LIdent "{" [Alt] "}" ;
-MItAnn. Term2 ::= "mit" LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
+MItAnn. Term2 ::= "mit" LIdent "{" IxMap "}" "{" [Alt] "}" ;
 MPr.    Term2 ::= "mpr" LIdent LIdent "{" [Alt] "}" ;
-MPrAnn. Term2 ::= "mpr" LIdent LIdent "{{" IxMap "}}" "{" [Alt] "}" ;
+MPrAnn. Term2 ::= "mpr" LIdent LIdent "{" IxMap "}" "{" [Alt] "}" ;
 Lam.    Term1 ::= "\\" LIdent "->" Term1 ;
 App.    Term2 ::= Term2 Term3 ;
 Let.    Term1 ::= "let" LIdent "=" Term1 "in" Term1 ;
 Alt.    Term3 ::= "{" [Alt] "}" ;
-AltAnn. Term3 ::= "{{" IxMap "}}" "{" [Alt] "}" ;
+AltAnn. Term3 ::= "{" IxMap "}" "{" [Alt] "}" ;
 coercions Term 3 ;
 
 Case. Alt ::= UIdent [LIdent] "->" Term ;

@@ -88,7 +88,7 @@ program =
     plus = mit add { Z   -> \m -> m
                    ; S n -> \m -> succ (add n m) } ;
     length = mit len { N -> zero; C x xs -> succ (len xs) } ;
-    psum = mit sum {{ a . (a -> Mu N) -> Mu N }}
+    psum = mit sum { a . (a -> Mu N) -> Mu N }
             { PN      -> \f -> zero
             ; PC x xs -> \f -> plus (f x)
                                     (sum xs {Pair a b -> plus (f a) (f b)} )

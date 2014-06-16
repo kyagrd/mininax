@@ -9,7 +9,7 @@ data P x r : {v} -> {v} -> * where
 pNil  = In 2 PNil ;
 pCons = \x -> \xs -> In 2 (PCons x xs) ;
 
-append = mit app {{ {i} {j} . Mu(P x) {j} {k} -> Mu(P x) {i} {k} }}
+append = mit app { {i} {j} . Mu(P x) {j} {k} -> Mu(P x) {i} {k} }
            { PNil       -> \ys  -> ys
            ; PCons x xs -> \ys  -> pCons x (app xs ys)
            } ;
@@ -64,7 +64,7 @@ pLUS = \n -> \m -> In 1 (PLUS n m) ;
 iF = \b -> \e1 -> \e2 -> In 1 (IF b e1 e2) ;
 
 
-eval =  mit ev {{ {t} . Val {t} }}
+eval =  mit ev { {t} . Val {t} }
           { VAL v       -> v
           ; PLUS e1 e2  -> plusV (ev e1) (ev e2)
           ; IF e0 e1 e2 ->  ifV (ev e0) (ev e1) (ev e2)
@@ -94,7 +94,7 @@ iFPOP = \n -> \m -> In 2 (IFPOP n m) ;
 tt = \c1 -> \c2 -> append (append c1 c2) (pCons aDD pNil) ;
 
 compile =
-  mit cmpl {{ {t} . Mu(P(Mu Instr)) {ts} {`cons t ts} }}
+  mit cmpl { {t} . Mu(P(Mu Instr)) {ts} {`cons t ts} }
     { VAL v       -> pCons (pUSH v) pNil
     ; PLUS e1 e2  -> append (append (cmpl e1) (cmpl e2)) (pCons aDD pNil)
     ; IF e0 e1 e2 -> append (cmpl e0) (pCons  (iFPOP (cmpl e1) (cmpl e2)) pNil)

@@ -66,7 +66,7 @@ pcons = \x -> \xs -> In 1 (PC x xs) ;
 z7 = pcons True (pcons (Pair False True) pnil) ;
 z8 = pcons one (pcons (Pair two three) pnil) ;
 kkk = \x -> \y -> x ;
-psum = mit sum {{ a . (a -> Mu N) -> Mu N }}
+psum = mit sum { a . (a -> Mu N) -> Mu N }
            { PN      -> \f -> zero
            ; PC x xs -> \f -> plus (f x) 
                                    (sum xs {Pair a b -> plus (f a) (f b)})
@@ -87,17 +87,17 @@ vcons = \x -> \xs -> In 1 (VC x xs) ;
 v1 = vcons one vnil ;
 v2 = vcons two v1 ;
 
-vlength = mit len {{ {n} . Mu N }}
+vlength = mit len { {n} . Mu N }
               { VN -> zero
               ; VC x xs -> succ (len xs)
               } ;
 
-vmap = \f -> mit map {{ {n} . Mu (V b) {n} }}
+vmap = \f -> mit map { {n} . Mu (V b) {n} }
                  { VN      -> vnil
                  ; VC x xs -> vcons (f x) (map xs)
                  } ;
 
-vapp = mit app {{ {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }}
+vapp = mit app { {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }
             { VN      -> \ys -> ys
             ; VC x xs -> \ys -> vcons x (app xs ys)
             } ;
@@ -106,12 +106,12 @@ n15 = vlength v2 ;
 v3 = vapp v2 v1 ;
 v4 = vmap succ v3 ;
 
--- vapp1 = mit app {{ {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }}
+-- vapp1 = mit app { {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }
 --             { VN      -> \ys -> vnil -- must fail
 --             ; VC x xs -> \ys -> vcons x (app xs ys)
 --             } ;
 
--- vapp2 = mit app {{ {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }}
+-- vapp2 = mit app { {n} . Mu (V b) {m} -> Mu (V b) {`plus n m} }
 --             { VN      -> \ys -> ys
 --             ; VC x xs -> \ys -> vcons x (app xs vnil) -- must fail
 --             } ;
