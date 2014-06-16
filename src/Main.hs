@@ -192,19 +192,20 @@ greet (CmdArgs{..}) = do
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
   let (kctx,ctx,u) = tiProg program
-  -- print "================================"
-  -- mapM_ print u
-  -- print "================================"
-  -- mapM_ print (reverse $ kctx)
-  -- print "================================"
-  -- mapM_ print (reverse $ ctx)
-  -- print "================================"
+  print "================================"
+  mapM_ print u
+  print "================================"
+  mapM_ print (reverse $ kctx)
+  print "================================"
+  mapM_ print (reverse $ ctx)
+  print "================================"
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type) 
-                                     ( unbindSch k )
+                               (foldr (.) id (map (uncurry subst) $ reverse u)
+                                  $ unbindSch k )
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
@@ -213,7 +214,8 @@ greet (CmdArgs{..}) = do
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type) 
-                                     ( unbindSch t )
+                               (foldr (.) id (map (uncurry subst) $ reverse u)
+                                  $ unbindSch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }
