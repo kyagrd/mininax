@@ -164,7 +164,7 @@ tiProg (Prog ds) = (kctx,ictx,u)
   where
   (kctx,ictx,u)
       = case (runTI $ do { (kctx,ictx,env) <- tiDecs ds ([],[],[])
-                           ; u <- getSubst; return (kctx,ictx,u) }) of
+                           ; u <- lift getSubst; return (kctx,ictx,u) }) of
             Left errMsg -> error errMsg
             Right (kctx,ictx,u) -> (kctx,ictx,u)
 
@@ -229,24 +229,20 @@ mygr file = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
 mygr2 file = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
                             ,argFilePath=Just file}
 
+mygreet  = mygr "test/test.mininax" 
+mygreet2 = mygr2 "test/test.mininax" 
 
-mygreet  = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
-                          ,argFilePath=Just "../test/test.mininax"}
+mypath = mygr "test/path.mininax"
+mypath2 = mygr2 "test/path.mininax"
 
-mygreet2 = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
-                          ,argFilePath=Just "../test/test.mininax"}
+myenv = mygr "test/env.mininax"
+myenv2 = mygr2 "test/env.mininax"
 
-mypath = mygr "../test/path.mininax"
-mypath2 = mygr2 "../test/path.mininax"
+mytmp = mygr "test/tmp.mininax"
+mytmp2 = mygr2 "test/tmp.mininax"
 
-myenv = mygr "../test/env.mininax"
-myenv2 = mygr2 "../test/env.mininax"
-
-mytmp = mygr "../test/tmp.mininax"
-mytmp2 = mygr2 "../test/tmp.mininax"
-
-mykpoly = mygr "../test/kpoly.mininax"
-mykpoly2 = mygr2 "../test/kpoly.mininax"
+mykpoly = mygr "test/kpoly.mininax"
+mykpoly2 = mygr2 "test/kpoly.mininax"
 
 
 

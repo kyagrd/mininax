@@ -23,6 +23,7 @@ import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.Error
 import Control.Monad.State
+import Control.Monad.State.Lazy
 import Language.LBNF.Runtime
 import Parser (ty2Type)
 import Generics.RepLib.Unify hiding (solveUnification)
@@ -123,8 +124,8 @@ mguMany ps = do
                  ( concat [ "\t"++printTree t1++" and "++printTree t2++"\n"
                           | (t1,t2)<-ps ] )
 
+lift2 = lift . lift
 getSubst = do { UState _ s <- lift get; return s }
--- putSubst u = do { UState c _ <- lift get; lift $ put (UState c u); return () }
 
 extendSubst (x,Var y) | x < y = extendSubst (y,Var x)
 extendSubst (x,t) =
@@ -140,7 +141,9 @@ unifyMany ps = mapM_ extendSubst =<< mguMany ps
 
 
 type KCtx = [(TyName,KiSch)]
-type KI = FreshMT (ErrorT UnifyError (State (UnificationState KiName Ki)))
+type KI = FreshMT (StateT [(TyName,Ki)]
+                          (ErrorT UnifyError
+                                  (State (UnificationState KiName Ki))))
 
 type KiSch = Bind ([TmName],[TyName],[KiName]) Ki
 
@@ -152,6 +155,7 @@ ki kctx ictx env (Var x) =
   case lookup x kctx of
     Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
     Just kisch -> return =<< freshInst kisch -- ki vars should be simple though
+
 ki kctx ictx env (TCon x) =
   case lookup x kctx of
     Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
@@ -159,25 +163,25 @@ ki kctx ictx env (TCon x) =
 ki kctx ictx env (TArr t1 t2) =
   do k1 <- ki kctx ictx env t1
      k2 <- ki kctx ictx env t2
-     lift $ unify Star k1
-     lift $ unify Star k2
+     lift2 $ unify Star k1
+     lift2 $ unify Star k2
      return Star
 ki kctx ictx env (TApp t1 (Right t2)) =
   do k1 <- ki kctx ictx env t1
      k2 <- ki kctx ictx env t2
      k <- Var <$> fresh "k"
-     lift $ unify (KArr (Right k2) k) k1
+     lift2 $ unify (KArr (Right k2) k) k1
      return k
 ki kctx ictx env (TApp t1 (Left e2)) =
   do k1 <- ki kctx ictx env t1
      t2 <- ti kctx ictx [] env e2
      k <- Var <$> fresh "k"
-     lift $ unify (KArr (Left t2) k) k1
+     lift2 $ unify (KArr (Left t2) k) k1
      return k
 ki kctx ictx env (TFix t) =
   do k1 <- ki kctx ictx env t
      k <- Var <$> fresh "k"
-     lift $ unify (KArr (Right k) k) k1
+     lift2 $ unify (KArr (Right k) k) k1
      return k
 
 freshInst sch = liftM snd (unbind sch)
@@ -257,7 +261,9 @@ fvTyInTy (TFix t) = fvTyInTy t
 fvTyInTy _ = error "this should be unrechable for fvTyInTy" 
 
 type Ctx = [(TmName,TySch)]
-type TI = FreshMT (ErrorT UnifyError (State (UnificationState TyName Ty)))
+type TI = FreshMT (StateT [(TyName,Ki)]
+                           (ErrorT UnifyError
+                                   (State (UnificationState TyName Ty))))
 
 type TySch = Bind [Either TmName TyName] Ty
 
@@ -273,14 +279,13 @@ unfoldTArr ty           = [ty]
 unfoldTApp (TApp t1 t2) = unfoldTApp t1 ++ [t2]
 unfoldTApp ty           = [Right ty]
 
-
 eitherVar = either (Left . Var) (Right . Var)
 
--- TODO catch errors and append more context info in error msg
+
 ti :: KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
 ti kctx ictx ctx env (Var x)
        | head(show x) == '`' = throwError(strMsg $ show x++
-                                          " backquoted variable not allowed (ti)")
+                                 " backquoted variable not allowed (ti)")
 ti kctx ictx ctx env (Var x) =
   case lookup x (ctx++ictx) of
     Nothing -> throwError(strMsg $ show x++" undefined var")
@@ -303,7 +308,7 @@ ti kctx ictx ctx env e@(In n t)
          return $ do -- fresh monad
            is <- sequence mis
            ty1 <- Var <$> fresh "t"
-           lift $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
+           lift2 $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
 ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
@@ -325,8 +330,8 @@ ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      () <- trace ("\tkctx' = "++show kctx') $ return ()
      () <- trace ("\tctx' = "++show ctx') $ return ()
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
-     lift $ unify tytm tytm'
-     u <- getSubst
+     lift2 $ unify tytm tytm'
+     u <- lift getSubst
      let ty = uapply u $
                 foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
      when (r `elem` fv ty) (throwError . strMsg $
@@ -354,8 +359,8 @@ ti kctx ictx ctx env (MPr b) =
                                return $ bind (union is vs) tyf
      let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
      tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
-     lift $ unify tytm tytm'
-     u <- getSubst
+     lift2 $ unify tytm tytm'
+     u <- lift getSubst
      let ty = uapply u $
                 foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
      when (r `elem` fv ty) (throwError . strMsg $
@@ -379,14 +384,14 @@ ti kctx ictx ctx env (App t1 t2) =
                  ++ "\n" ++ "ctx = " ++ show ctx
                 )
      ty <- Var <$> fresh "a"
-     lift $ unify (TArr ty2 ty) ty1
+     lift2 $ unify (TArr ty2 ty) ty1
      return ty
 ti kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
      ty <- ti kctx ictx ctx env t1
             `catchErrorThrowWithMsg`
                (++ "\n\t" ++ "when checking type of " ++ show t1)
-     u <- getSubst
+     u <- lift getSubst
      tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
      ti kctx ictx ((x, tysch) : ctx) env t2
 ti kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
@@ -398,11 +403,11 @@ ti kctx ictx ctx env (Alt (Just phi) as) =
 
 tiAlts kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
   do tys <- mapM (tiAlt kctx ictx ctx env Nothing) as
-     lift $ unifyMany (zip tys (tail tys))
+     lift2 $ unifyMany (zip tys (tail tys))
      return (head tys)
 tiAlts kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
   do tys <- mapM (tiAlt kctx ictx ctx env (Just phi)) as
-     u <- getSubst
+     u <- lift getSubst
      let (Right tcon : args) =
             tApp2list $ case (head tys) of TArr t _ -> uapply u t
      (is, rngty) <- unbind (substBackquote env phi)
@@ -412,7 +417,7 @@ tiAlts kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
      let domty = foldl TApp tcon args'
      let tysch = bind is (TArr domty rngty)
      tys' <- mapM freshInst (replicate (length as) tysch)
-     lift $ unifyMany (zip tys' tys)
+     lift2 $ unifyMany (zip tys' tys)
      return =<< freshInst tysch
 
 
@@ -433,23 +438,11 @@ app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]
 
 
-{-
- (is,body) <- unbind phi
-     let ictx_ = filter (isUpper.head.show.fst) ictx
-     let fvTyPhi = nub $ (fv body \\ fv is) \\ (fv kctx ++ fv ictx_ ++ fvTmInTy body)
-         fvTmPhi = nub $ (fvTmInTy body \\ fv is) \\ (fv kctx ++ fv ictx_)
-     kctx' <- (++ kctx) <$>
-                 sequence [ (,) x <$> (Var <$> fresh "k") | x <- fvTyPhi ]
-     ictx' <- (++ ictx) <$>
-                 sequence [ (,) x <$> (monoTy <$> (Var <$> fresh "c")) | x <- fvTmPhi ]
--}
-
-
 tiAlt kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
                  Just xt -> freshInst xt
-     u <- trace ("++++++++"++show x++"++++++++++++++\n"++show mphi++"\n xTy = "++show xTy) $ getSubst
+     u <- trace ("++++++++"++show x++"++++++++++++++\n"++show mphi++"\n xTy = "++show xTy) $ lift getSubst
      let xty = uapply u xTy
      let xtyUnfold = unfoldTArr xty
      let (xtyArgs, xtyRet) = (init xtyUnfold, last xtyUnfold)
@@ -458,8 +451,8 @@ tiAlt kctx ictx ctx env mphi (x,b) =
         Just phi -> do
           (is, bodyTy) <- unbind phi
           t <- (Var <$> fresh "t")
-          lift $ unify (foldl TApp t $ map eitherVar is) xtyRet
-          u <- getSubst
+          lift2 $ unify (foldl TApp t $ map eitherVar is) xtyRet
+          u <- lift getSubst
           let bodyTy' = uapply u bodyTy
           return (u,is,bodyTy',Just t)
      let xty_ = uapply u xty
@@ -512,16 +505,16 @@ tiAlt kctx ictx ctx env mphi (x,b) =
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of " ++ show t)
      () <- trace ("zzaaa2\t"++show xtyRet++" =?= "++show domty) $ return ()
-     lift $ unify xtyRet domty
+     lift2 $ unify xtyRet domty
      () <- trace "zzaaa3" $ return ()
-     u <- getSubst
+     u <- lift getSubst
      case mt of
        Nothing  -> return ()
        Just _   ->
                 do () <- trace ("zzaaa4\t"++
                                 show bodyTy'++" =?= "++show rngty) $ return ()
-                   lift $ unify bodyTy' rngty
-     u <- getSubst
+                   lift2 $ unify bodyTy' rngty
+     u <- lift getSubst
      () <- trace "zzaaa5" $ return ()
      let ty = uapply u (TArr domty rngty)
      let TArr domty rngty = ty
@@ -530,7 +523,7 @@ tiAlt kctx ictx ctx env mphi (x,b) =
             (throwError . strMsg $ "rigid variables "++ show eRetVars ++
                                    " in the return type "++ show rngty ++
                                    " of "++ show t)
-     u <- getSubst
+     u <- lift getSubst
      unless (null $ filter (\(x,t)-> elem x (fvTyPhi ++ fvTmPhi)
                                   && case t of {Var _ -> False; _ -> True}) u)
        (throwError . strMsg $ "polymorphic vars in phi cannot be specialized "
@@ -566,29 +559,25 @@ tiAlt kctx ictx ctx env mphi (x,b) =
 
 
 
-
-_x = "x"
-x = Var _x
-_y = "y"
-y = Var _y
-
 lam x t = Lam (bind x t)
+
+idTm = lam "x" (Var "x")
 
 nullState = UState [] []
 
 
-runUS = runUSwith nullState
+-- runUS = runUSwith nullState
 
 runUSwith st0 st = uapply (uSubst s) e where (e,s) = runState st st0
 
+runTI = runTIwith nullState []
+ 
+runTIwith stUS st = runUSwith stUS . runErrorT . flip evalStateT st . runFreshMT
 
-runTI = runTIwith nullState
-
-runTIwith st = runUSwith st . runErrorT . runFreshMT
 
 ti' ctx = runTI . ti [] [] [] ctx
 
-ty = runTI $ ti [] [] [] [] (lam _x x)
+ty = runTI $ ti [] [] [] [] (lam "x" (Var "x"))
 
 
 unbindSch sch = snd (unsafeUnbind sch)
@@ -630,9 +619,9 @@ ev env (App t1 t2) =
                    let In _ v = v2
                    sreturn [(f,v1)] =<< ev env' (App t v)
        MPr b -> do ((f,cast),t) <- unbind b
-                   let env' = (f,v1) : (cast,lam _x x) : env
+                   let env' = (f,v1) : (cast,idTm) : env
                    let In _ v = v2
-                   sreturn [(f,v1),(cast,lam _x x)] =<< ev env' (App t v)
+                   sreturn [(f,v1),(cast,idTm)] =<< ev env' (App t v)
        Alt m as ->
          do let (Con c:vs) = app2list v2
             case lookup c as of
@@ -692,9 +681,9 @@ norm env (App t1 t2) =
               _      -> return (App v1 v2)
        MPr b ->
          do ((f,cast),t) <- unbind b
-            let env' = (f,v1) : (cast,lam _x x) : env
+            let env' = (f,v1) : (cast,idTm) : env
             case v2 of
-              In _ v -> sreturn [(f,v1),(cast,lam _x x)] =<< norm env' (App t v)
+              In _ v -> sreturn [(f,v1),(cast,idTm)] =<< norm env' (App t v)
               _      -> return (App v1 v2)
        Alt m as ->
          do let (Con c:vs) = app2list v2

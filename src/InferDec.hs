@@ -52,10 +52,10 @@ trace _ a = a
 
 tiDecs ds = foldl1 (>=>) (map tiDec ds)
 
--- TODO not checking wheter there are TyName with backquote in t
--- it should be only TmName inside { } which can be backquote var
+-- TODO not checking wheter there are TyName with backquote in t outside { }.
+-- It should be only TmName inside { } which can be backquote var.
 -- I think current implementation does catch this kind of error eventually
--- but I expect that the error message would be misterious
+-- but I expect that the error message would be misterious.
 
 kind2Ki' env = substBackquote env . kind2Ki
 
@@ -73,7 +73,7 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env) = trace ("\nDef "++ show x++" *****") $
      ty <- ti kctx ictx [] env tm
            `catchErrorThrowWithMsg`
               (++ "\n\t" ++ "when checking defintion of " ++ x)
-     u <- getSubst
+     u <- lift getSubst
      tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx)
                   =<< norm env (uapply u ty)
      let ictx' = (string2Name x, tysch) : ictx
@@ -90,7 +90,7 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
      let kArgSigsR = [ (x,monoKi k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,monoTy t) | (x,Left t)  <- kArgSigs]
      mapM (kiDAlt (kArgSigsR ++ kctx) (kArgSigsL ++ ictx) env) dAlts
-     u <- getSubst
+     u <- lift getSubst
      tcSig <- (,) (string2Name tc) <$>
                   (closeKi kctx ictx [] =<<
                      norm env (uapply u $ foldr KArr Star (map snd kArgSigs)))
@@ -122,18 +122,18 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
      () <- trace ("kArgSigs = "++show kArgSigs) $ return ()
      let kArgSigsR = [ (x,monoKi k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,monoTy t) | (x,Left t)  <- kArgSigs]
-     u <- getSubst
+     u <- lift getSubst
      tcSig <- (,) (string2Name tc) <$>
                   closeKi kctx ictx_upper (fv kArgSigs)
                     (uapply u $ foldr KArr (kind2Ki' env k) (map snd kArgSigs))
      cSigs <- mapM (kiGAlt tcSig as' (kArgSigsR++kctx) (kArgSigsL++ictx) env)
                    gAlts
-     u <- getSubst
+     u <- lift getSubst
      tcSig' <- (,) (fst tcSig) <$>
                    (closeKi kctx_upper ictx_upper (fv kArgSigs)
                      =<< norm env (uapply u $ (snd $ unsafeUnbind $ snd tcSig)))
      let kctx' = tcSig' : kctx
-     u <- getSubst
+     u <- lift getSubst
      ictx' <- (++ ictx) <$> 
                   sequence
                     [ (,) c <$>
@@ -151,7 +151,7 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
 kiDAlt :: KCtx -> Ctx -> Env -> DataAlt -> KI ()
 kiDAlt kctx ictx env (DAlt _ ts) =
   do ks <- mapM (ki kctx ictx env) (map (type2Ty' env) ts)
-     lift $ unifyMany (zip (repeat Star) ks)
+     lift2 $ unifyMany (zip (repeat Star) ks)
   where
 
 kiGAlt :: (TyName, KiSch) -> [TArg] -> KCtx -> Ctx -> Env -> GadtAlt -> KI (TmName,Ty)
@@ -184,8 +184,8 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
      () <- trace ("wwwwww222") $ return ()
      ks <- mapM (ki kctx' ictx' env) ts'
      () <- trace ("wwwwww333") $ return ()
-     lift $ unifyMany (zip (repeat Star) (k:ks))
-     u <- getSubst
+     lift2 $ unifyMany (zip (repeat Star) (k:ks))
+     u <- lift getSubst
      -- () <- trace ("u = "++show u) $ return ()
      () <- trace ("wwwwww444") $ return ()
      return (string2Name c, ty')
