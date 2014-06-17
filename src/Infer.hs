@@ -62,8 +62,8 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
    unifyStep (dum :: Proxy(n,PSUT)) t1 t2 | isTm t1 && isTm t2 =
     do a1 <- runFreshMT (norm [] t1)
        a2 <- runFreshMT (norm [] t2)
-       -- trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+       trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+        case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
             (Just n1, Just n2) ->  if n1 == n2
                                      then return ()
                                      else addSub n1 (var n2);
@@ -73,8 +73,8 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
        where
        addSub n t = extendSubstitution (n, t)
    unifyStep (dum :: Proxy(n,PSUT)) a1 a2 =
-      -- trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-      case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+      trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
            (Just n1, Just n2) ->  if n1 == n2
                                     then return ()
                                     else addSub n1 (var n2);
@@ -105,33 +105,6 @@ solveUnification (eqs :: [(a, a)]) =
                                rwConstraints
                     Nothing -> return ()
 
-{-
-solveUnification (eqs :: [(PSUT, PSUT)]) =
-     r >> return (uSubst final)
-     -- case r of Left e  -> throwError e
-     --           Right _ -> return $ uSubst final
-     where
-     (r, final) = runState (runErrorT rwConstraints) (UState cs [])
-     cs = do (a1, a2) <- eqs
-             let (a1',a2') | isTm a1 && isTm a2
-                                       = ( runEither . runFreshMT $ norm [] a1
-                                         , runEither . runFreshMT $ norm [] a2 )
-                           | otherwise = (a1, a2)
-                 
-             return (UC dict a1' a2')
-     rwConstraints :: UM (Name PSUT) PSUT ()
-     rwConstraints =
-       do c <- dequeueConstraint
-          case c of Just (UC d a1 a2) ->
-                            do unifyStepD d (undefined :: Proxy (Name PSUT, PSUT)) a1 a2
-                               rwConstraints
-                    Nothing -> return ()
-
-
-runEither (Right a) = a
-runEither (Left b) = error b
--}
-
 envApply env = foldr (.) id (map (uncurry LN.subst) env)
 
 substBackquote env = envApply [(string2Name('`':show x)::TmName,t) | (x,t)<-env]
@@ -150,17 +123,15 @@ mguMany ps = do
                  ( concat [ "\t"++printTree t1++" and "++printTree t2++"\n"
                           | (t1,t2)<-ps ] )
 
-
 getSubst = do { UState _ s <- lift get; return s }
-putSubst u = do { UState c s <- lift get; lift $ put (UState c s); return () }
+-- putSubst u = do { UState c _ <- lift get; lift $ put (UState c u); return () }
 
 extendSubst (x,Var y) | x < y = extendSubst (y,Var x)
 extendSubst (x,t) =
   do u <- getSubst
      case lookup x u of
-       Nothing -> extendSubstitution (x,t)
-       Just t' -> unify t t' >> extendSubstitution (x,t)
-
+       Nothing -> extendSubstitution (x,uapply u t)
+       Just t' -> unify t t' >> extendSubstitution (x,uapply u t)
 
 unify t1 t2 = trace ("unify ("++show t1++") ("++show t2++")")
                 (mapM_ extendSubst =<< mgu t1 t2)
@@ -218,27 +189,39 @@ closeKi kctx ctx as k = do -- as are extra vars that should not to generalize
                      ++"\n\t"++show freeTyVars
                      ++"\n\t"++show freeTmVars) $ return ()
   () <- trace ("\n\t freeKiVars = "++show freeKiVars
-             ++"\n\t freeNonKiVars = "++show freeNonKiVars
              ++"\n\t freeTyVars = "++show freeTyVars
              ++"\n\t freeTmVars = "++show freeTmVars ) $ return ()
   () <- trace ("\n\t kctx = "++show kctx
              ++"\n\t ctx = "++show ctx ) $ return ()
   () <- trace ("\n\t fv k = "++show(fv k::[KiName])) $ return ()
+  unless (null $ freeKiVars `intersect` freeTyVars)
+    (throwError . strMsg $
+       "duplicate kind/type vars "++show (freeKiVars `intersect` freeTyVars)++
+       "when generalizing "++show k)
+  unless (null $ freeTyVars `intersect` freeTmVars)
+    (throwError . strMsg $
+       "duplicate type/term vars "++show (freeTyVars `intersect` freeTmVars)++
+       "when generalizing "++show k)
+  unless (null $ freeKiVars `intersect` freeTmVars)
+    (throwError . strMsg $
+       "duplicate kind/term vars "++show (freeKiVars `intersect` freeTmVars)++
+       "when generalizing "++show k)
   return $ bind (freeKiVars,freeTyVars,freeTmVars) k
   where
   freeKiVars = nub (fvKi k) \\ (fv ctx ++ fv kctx ++ as)
-  freeNonKiVars = nub (concatMap fv $ tysInKi k)
-                  \\ (fv ctx ++ fv kctx ++ freeKiVars ++ as)
-  freeTyVars = freeNonKiVars \\ freeTmVars
+  freeTyVars = nub (concatMap fvTyInTy $ tysInKi k) \\ (fv ctx ++ fv kctx ++ as)
   freeTmVars = nub (concatMap fvTmInTy $ tysInKi k) \\ (fv ctx ++ fv kctx ++ as)
 
 
 closeTy kctx ctx ty = do
+  unless (null $ freeLvars `intersect` freeRvars)
+    (throwError . strMsg $
+       "duplicate type/term vars "++show (freeLvars `intersect` freeRvars)++
+       "when generalizing "++show ty)
   return $ bind (map Right freeRvars ++ map Left freeLvars) ty
   where
-  freevars = nub (fv ty) \\ (fv ctx ++ fv kctx)
   freeLvars = nub (fvTmInTy ty) \\ (fv ctx ++ fv kctx)
-  freeRvars = freevars \\ freeLvars
+  freeRvars = nub (fvTyInTy ty) \\ (fv ctx ++ fv kctx)
 
 
 -- assumes that it is applied only to kinds
@@ -263,6 +246,15 @@ fvTmInTy (TApp t1 (Right t2)) = fvTmInTy t1 ++ fvTmInTy t2
 fvTmInTy (TApp t1 (Left  t2)) = fvTmInTy t1 ++ fv t2
 fvTmInTy (TFix t) = fvTmInTy t
 fvTmInTy _ = error "this should be unrechable for fvTmInTy" 
+
+fvTyInTy t | not(isTy t) = []
+fvTyInTy (Var x) = [x]
+fvTyInTy (TCon _) = []
+fvTyInTy (TArr t1 t2) = fvTyInTy t1 ++ fvTyInTy t2
+fvTyInTy (TApp t1 (Right t2)) = fvTyInTy t1 ++ fvTyInTy t2
+fvTyInTy (TApp t1 (Left  t2)) = fvTyInTy t1
+fvTyInTy (TFix t) = fvTyInTy t
+fvTyInTy _ = error "this should be unrechable for fvTyInTy" 
 
 type Ctx = [(TmName,TySch)]
 type TI = FreshMT (ErrorT UnifyError (State (UnificationState TyName Ty)))

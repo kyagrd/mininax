@@ -245,6 +245,9 @@ myenv2 = mygr2 "../test/env.mininax"
 mytmp = mygr "../test/tmp.mininax"
 mytmp2 = mygr2 "../test/tmp.mininax"
 
+mykpoly = mygr "../test/kpoly.mininax"
+mykpoly2 = mygr2 "../test/kpoly.mininax"
+
 
 
 

@@ -1,0 +1,32 @@
+-- vim: sw=2: ts=2: expandtab: syntax=haskell:
+
+data Unit = U ;
+data T0 a = C0 a ;
+data T1 f = C1 (f Unit) ;
+-- data T f g a = C (f g a) | D (g f a); -- error occurs check
+
+data F g a = D (g a) ;
+data FF g a = DD1 (g a) | DD2 a;
+
+data TTT0 a = CCC0 (F T0 a) ;
+data TTT1 a = CCC1 (F T1 a) ;
+
+------- BUG: These (v1 and v2) do not cause problem even I use monoKi.
+-------      Term level thing do not seem to go up to kind level.
+-------      This is is not istelf a bug ... since it should work with polyki
+v1 = D (C0 U) ;
+v2 = D (C1 (C0 U)) ;
+
+
+x1 = DD1 (C0 U) ;
+-- x2 = DD1 (C1 (C0 U)) ; -- BUG: should not work -- but this one is hard bug
+
+v3 = (C1 (C0 U)) ;
+
+
+id = \x -> x ;
+
+data Maybe a = Nothing | Just a ;
+data T r m a = MkT (m a) (r Maybe (m a)) ;
+
+mkT = \m -> \a -> In 2 (MkT m a) ;

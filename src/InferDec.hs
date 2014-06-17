@@ -68,7 +68,7 @@ tiDec :: Dec -> (KCtx,Ctx,Env) -> TI (KCtx,Ctx,Env)
 tiDec (Def (LIdent x) t) (kctx,ictx,env)
   | head x == '`' = throwError(strMsg $ show x++
                                       " backquoted variable not allowed")
-tiDec (Def (LIdent x) t) (kctx,ictx,env) =trace ("\nDef "++ show x++" *****") $
+tiDec (Def (LIdent x) t) (kctx,ictx,env) = trace ("\nDef "++ show x++" *****") $
   do let tm = term2Tm' env t
      ty <- ti kctx ictx [] env tm
            `catchErrorThrowWithMsg`
@@ -169,10 +169,13 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
          resTyUnfold' = unfoldTApp resTy'
          fvAll' = nub (fv ty' \\ fv as) \\ (tc : fv_upper_kctx_ctx)
          fvTm' = nub (fvTmInTy ty' \\ fv as) \\ (tc : fv_upper_kctx_ctx)
-         fvTy' = fvAll' \\ fvTm'
+         fvTy' = nub (fvTyInTy ty' \\ fv as) \\ (tc : fv_upper_kctx_ctx)
+     unless (null $ fvTy' `intersect` fvTm')
+       (throwError . strMsg $
+          "duplicate type/term vars "++show (fvTy' `intersect` fvTm')++
+          "when generalizing "++show ty')
      kctx' <- (++ kctx) <$> sequence [(,) x <$> freshKi | x <- fvTy']
      ictx' <- (++ ictx) <$> sequence [(,) x <$> freshTy | x <- fvTm']
-     () <- trace ("fvTmInTy ty' = "++show (fvTmInTy ty'::[TmName])) $ return ()
      () <- trace ("kctx' = "++show kctx') $ return ()
      () <- trace ("ictx' = "++show ictx') $ return ()
      k <- ki ((tc,kisch):kctx') ictx' env resTy'
@@ -189,11 +192,8 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
   where
   fv_upper_kctx_ctx = filter (isUpper.head.show) (fv kctx ++ fv ictx)
   ty = type2Ty' env t
-  (resTy:ts) = reverse (unfoldTArr ty)
-  resTyUnfold = unfoldTApp resTy
+  resTyUnfold = unfoldTApp (last (unfoldTArr ty))
   fvAll = nub (fv ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
-  fvTm = nub (fvTmInTy ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
-  fvTy = fvAll \\ fvTm
   freshKi = monoKi . Var <$> fresh "k"
   freshTy = monoTy . Var <$> fresh "a"
 
