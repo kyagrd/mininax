@@ -48,7 +48,7 @@ instance (Eq n, Show n, Show a, HasVar n a) => Unify n a String where
 instance (Eq n, Show n, Show a, HasVar n a) => Unify n a (Name s) where
    unifyStep _ = unifyStepEq
 
-instance ( Alpha n, Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Bind n PSUT) where
+instance (Alpha n, Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Bind n PSUT) where
    unifyStep _ b1 b2 
        | b1 `aeq` b2 = return ()
        | otherwise   =
@@ -341,8 +341,8 @@ ti kctx ictx ctx env e@(In n t)
        let m = fromInteger n
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
-         mis <- sequence $ replicate m [ Right . Var <$> fresh "k"
-                                       , Left  . Var <$> freshTyName' "i" ]
+         mis <- sequence $ replicate m [ Right . Var <$> freshTyName' "a"
+                                       , Left  . Var <$> fresh "i" ]
          return $ do -- fresh monad
            is <- sequence mis
            ty1 <- Var <$> freshTyName' "t"
