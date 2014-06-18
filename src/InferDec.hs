@@ -76,6 +76,7 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env) = trace ("\nDef "++ show x++" *****") $
      u <- lift getSubst
      tysch <- closeTy kctx (filter (isUpper.head.show.fst) ictx)
                   =<< norm env (uapply u ty)
+     () <- trace (show (x, snd $ unsafeUnbind tysch)) $ return ()
      let ictx' = (string2Name x, tysch) : ictx
          env'  = (string2Name x, envApply env tm) : env
      u <- lift getSubst

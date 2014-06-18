@@ -30,7 +30,7 @@ executable mininax
     hs-source-dirs: src
     other-modules: Syntax InferDec Infer Parser
     ghc-options: -Wall -O2 -cpp -pgmPcpphs -optP--cpp
-    -- ghc-prof-options: -Wall -auto-all -caf-all -O2 -cpp -pgmPcpphs -optP--cpp
+    ghc-prof-options: -Wall -rtsopts -auto-all -caf-all -O2 -cpp -pgmPcpphs -optP--cpp
  
 test-suite test-mininax
     build-depends: BNFC-meta >= 0.4.0.1, QuickCheck -any,

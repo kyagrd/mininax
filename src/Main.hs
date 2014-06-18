@@ -160,13 +160,13 @@ cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag <*> filepathArg
     <> value Nothing
 
 
-tiProg (Prog ds) = (kctx,ictx,u)
+tiProg (Prog ds) = (kctx,ictx)
   where
-  (kctx,ictx,u)
+  (kctx,ictx)
       = case (runTI $ do { (kctx,ictx,env) <- tiDecs ds ([],[],[])
-                           ; u <- lift getSubst; return (kctx,ictx,u) }) of
+                         ; return (kctx,ictx) }) of
             Left errMsg -> error errMsg
-            Right (kctx,ictx,u) -> (kctx,ictx,u)
+            Right (kctx,ictx) -> (kctx,ictx)
 
 evProg (Prog ds) = do
   mapM_ putStrLn
@@ -191,10 +191,7 @@ greet (CmdArgs{..}) = do
   h <- maybe (return stdin) (\s -> openFile s ReadMode) argFilePath
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
-  let (kctx,ctx,u) = tiProg program
-  -- print "================================"
-  -- putStrLn ("length u = "++show(length u))
-  -- mapM_ print u
+  let (kctx,ctx) = tiProg program
   -- print "================================"
   -- putStrLn ("length kctx = "++show(length kctx))
   -- mapM_ print (reverse $ kctx)
@@ -202,13 +199,13 @@ greet (CmdArgs{..}) = do
   -- putStrLn ("length ctx = "++show(length ctx))
   -- mapM_ print (reverse $ ctx)
   -- print "================================"
-  let uapply_u = uapply u
+  -- let uapply_u = uapply u
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type)
-                               (uapply_u $ unbindSch k )
+                               ({- uapply_u $ -} unbindSch k )
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
@@ -217,7 +214,7 @@ greet (CmdArgs{..}) = do
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type)
-                               (uapply_u $ unbindSch t )
+                               ({- uapply_u $ -} unbindSch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }

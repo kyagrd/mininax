@@ -92,9 +92,8 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
 -- solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Either UnifyError [(n, a)]
 
 solveUnification (eqs :: [(a, a)]) =
-     r >> return (uSubst final)
-     -- case r of Left e  -> throwError e
-     --           Right _ -> return $ uSubst final
+     case r of Left e  -> throwError e
+               Right _ -> return $ uSubst final
      where
      (r, final) = runState (runErrorT rwConstraints) (UState cs [])
      cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
@@ -128,15 +127,16 @@ lift2 = lift . lift
 getSubst = do { UState _ s <- lift get; return s }
 
 extendSubst (x,Var y) | x < y = extendSubst (y,Var x)
+                      | x== y = return ()
 extendSubst (x,t) =
   do u <- getSubst
      case lookup x u of
        Nothing -> extendSubstitution (x,t)
-       Just t' -> unify t t' >> extendSubstitution (x,t)
+       Just t' -> mapM_ extendSubst =<< mgu t t'
 
 unify t1 t2 = -- trace ("unify ("++show t1++") ("++show t2++")") $
-                do u <- getSubst
-                   mapM_ extendSubst =<< mgu (uapply u t1) (uapply u t2)
+  do u <- getSubst
+     mapM_ extendSubst =<< mgu (uapply u t1) (uapply u t2)
 
 unifyMany ps = do u <- getSubst
                   mapM_ extendSubst =<< mguMany (map (uapply u) ps)
