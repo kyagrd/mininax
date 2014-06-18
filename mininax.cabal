@@ -20,16 +20,17 @@ extra-source-files: /home/kyagrd/cscs/mininax/src/macros.h
  
 executable mininax
     build-depends: BNFC-meta >= 0.4.0.1 && < 0.5,
-                   QuickCheck -any, RepLib >= 0.5 && < 0.6,
+                   QuickCheck -any, RepLib >= 0.5.3 && < 0.6,
                    base >= 4.3 && < 5, containers -any, mtl -any,
                    optparse-applicative >= 0.9,
-                   unbound >= 0.4.2
+                   unbound >= 0.4.3 && < 0.5
     main-is: Main.hs
     buildable: True
     build-tools: cpphs -any
     hs-source-dirs: src
     other-modules: Syntax InferDec Infer Parser
-    ghc-options: -Wall -O4 -cpp -pgmPcpphs -optP--cpp
+    ghc-options: -Wall -O2 -cpp -pgmPcpphs -optP--cpp
+    -- ghc-prof-options: -Wall -auto-all -caf-all -O2 -cpp -pgmPcpphs -optP--cpp
  
 test-suite test-mininax
     build-depends: BNFC-meta >= 0.4.0.1, QuickCheck -any,
@@ -44,4 +45,4 @@ test-suite test-mininax
     cpp-options: -DMAIN_FUNCTION=testMain
     hs-source-dirs: src
     other-modules: Syntax InferDec Infer Parser
-    ghc-options: -Wall -O4 -cpp -pgmPcpphs -optP--cpp
+    ghc-options: -Wall -O2 -cpp -pgmPcpphs -optP--cpp
