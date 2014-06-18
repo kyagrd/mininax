@@ -19,7 +19,7 @@ v2 = D (C1 (C0 U)) ;
 
 
 x1 = DD1 (C0 U) ;
--- x2 = DD1 (C1 (C0 U)) ; -- BUG: should not work -- but this one is hard bug
+-- x2 = DD1 (C1 (C0 U)) ; -- fail causing ill kinded ty app (FF T1 T0)
 
 v3 = (C1 (C0 U)) ;
 

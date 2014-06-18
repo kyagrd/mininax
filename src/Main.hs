@@ -29,7 +29,7 @@ import Control.Applicative
 -- import Control.Monad.Trans
 import Control.Monad.Error
 -- import Control.Monad.Identity
-import Data.List (stripPrefix)
+import Data.List (stripPrefix, foldl')
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
 import Language.LBNF.Runtime hiding (printTree)
@@ -193,18 +193,22 @@ greet (CmdArgs{..}) = do
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
   let (kctx,ctx,u) = tiProg program
   -- print "================================"
+  -- putStrLn ("length u = "++show(length u))
   -- mapM_ print u
   -- print "================================"
+  -- putStrLn ("length kctx = "++show(length kctx))
   -- mapM_ print (reverse $ kctx)
   -- print "================================"
+  -- putStrLn ("length ctx = "++show(length ctx))
   -- mapM_ print (reverse $ ctx)
   -- print "================================"
+  let uapply_u = uapply u
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type)
-                               (uapply u $ unbindSch k )
+                               (uapply_u $ unbindSch k )
                            | (x,k) <- kctx ]
           ; putStrLn ""
           }
@@ -213,7 +217,7 @@ greet (CmdArgs{..}) = do
                 $ reverse [ show x++" : "++
                             (renderN 1 . prt 1)
                             -- (show . ty2Type)
-                               (uapply u $ unbindSch t )
+                               (uapply_u $ unbindSch t )
                            | (x,t) <- ctx ]
           ; putStrLn ""
           }
@@ -229,8 +233,8 @@ mygr file = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=False,flagAll=False
 mygr2 file = greet $ CmdArgs{flagKi=True,flagTi=True,flagEv=True,flagAll=True
                             ,argFilePath=Just file}
 
-mygreet  = mygr "test/test.mininax" 
-mygreet2 = mygr2 "test/test.mininax" 
+mytest  = mygr "test/test.mininax" 
+mytest2 = mygr2 "test/test.mininax" 
 
 mypath = mygr "test/path.mininax"
 mypath2 = mygr2 "test/path.mininax"

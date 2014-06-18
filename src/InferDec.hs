@@ -78,15 +78,18 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env) = trace ("\nDef "++ show x++" *****") $
                   =<< norm env (uapply u ty)
      let ictx' = (string2Name x, tysch) : ictx
          env'  = (string2Name x, envApply env tm) : env
+     u <- lift getSubst
+     () <- trace ("length u = "++show(length u)) $ return ()
      return (kctx,ictx',env')
-tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
+tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) =
+ trace ("\ntiDec "++tc) $
   do kArgSigs <- sequence $
                    do i <- is -- list monad
                       return $ case i of
                         IVarR(LIdent a) -> (,) (string2Name a) <$>
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
-                                               (Left .  Var <$> fresh "i")
+                                               (Left .  Var <$> freshTyName' "i")
      let kArgSigsR = [ (x,monoKi k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,monoTy t) | (x,Left t)  <- kArgSigs]
      mapM (kiDAlt (kArgSigsR ++ kctx) (kArgSigsL ++ ictx) env) dAlts
@@ -102,6 +105,8 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
                              (norm env $ uapply u $
                                    foldr TArr retTy (map (type2Ty' env) ts)) )
                      | DAlt (UIdent c) ts <- reverse dAlts ] 
+     u <- lift getSubst
+     () <- trace ("length u = "++show(length u)) $ return ()
      return (kctx',ictx',env)
   where
   ictx_upper = filter (isUpper.head.show.fst) ictx
@@ -111,14 +116,15 @@ tiDec (Data (UIdent tc) is dAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
                           IVarR(LIdent a) -> Right $ Var(string2Name a)
                           IVarL(LIdent a) -> Left  $ Var(string2Name a)
 
-tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
+tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) =
+ trace ("\ntiDec "++tc) $
   do kArgSigs <- sequence $
                    do i <- as -- list monad
                       return $ case i of
                         IVarR(LIdent a) -> (,) (string2Name a) <$>
                                                (Right . Var <$> fresh "k")
                         IVarL(LIdent a) -> (,) (string2Name a) <$>
-                                               (Left .  Var <$> fresh "i")
+                                               (Left .  Var <$> freshTyName' "i")
      () <- trace ("kArgSigs = "++show kArgSigs) $ return ()
      let kArgSigsR = [ (x,monoKi k) | (x,Right k) <- kArgSigs]
      let kArgSigsL = [ (x,monoTy t) | (x,Left t)  <- kArgSigs]
@@ -140,6 +146,8 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) = trace ("\ntiDec "++tc) $
                             (closeTy kctx' (filter (isUpper.head.show.fst) ictx)
                                  =<< norm env (uapply u ty) )
                      | (c,ty) <- reverse cSigs ]
+     u <- lift getSubst
+     () <- trace ("length u = "++show(length u)) $ return ()
      return (kctx',ictx',env)
   where
   kctx_upper = filter (isUpper.head.show.fst) kctx
@@ -195,7 +203,7 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
   resTyUnfold = unfoldTApp (last (unfoldTArr ty))
   fvAll = nub (fv ty \\ fv as) \\ (tc : fv_upper_kctx_ctx)
   freshKi = monoKi . Var <$> fresh "k"
-  freshTy = monoTy . Var <$> fresh "a"
+  freshTy = monoTy . Var <$> freshTyName' "a"
 
 evDecs env (Data _ _ _ : ds)       = evDecs env ds
 evDecs env (Gadt _ _ _ _ : ds)     = evDecs env ds

@@ -56,15 +56,15 @@ instance ( Alpha n, Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Bind n PSUT) w
                          do { (_,e1) <- unbind b1
                             ; (_,e2) <- unbind b2
                             ; return (e1,e2) }
-              trace ("trace in instance Unify n a (Bind n a): " ++ show (e1,e2)) $
-               unifyStep undefined e1 e2
+              -- trace ("trace in instance Unify n a (Bind n a): " ++ show (e1,e2)) $
+              unifyStep undefined e1 e2
 
 instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
    unifyStep (dum :: Proxy(n,PSUT)) t1 t2 | isTm t1 && isTm t2 =
     do a1 <- runFreshMT (norm [] t1)
        a2 <- runFreshMT (norm [] t2)
-       trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
-        case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+       -- trace ("trace 1 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+       case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
             (Just n1, Just n2) ->  if n1 == n2
                                      then return ()
                                      else addSub n1 (var n2);
@@ -74,7 +74,7 @@ instance (Eq n, Show n, HasVar n PSUT) => Unify n PSUT PSUT where
        where
        addSub n t = extendSubstitution (n, t)
    unifyStep (dum :: Proxy(n,PSUT)) a1 a2 =
-      trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
+      -- trace ("trace 2 in instance Unify n PSUT PSUT): " ++ show (a1,a2)) $
        case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
            (Just n1, Just n2) ->  if n1 == n2
                                     then return ()
@@ -131,13 +131,15 @@ extendSubst (x,Var y) | x < y = extendSubst (y,Var x)
 extendSubst (x,t) =
   do u <- getSubst
      case lookup x u of
-       Nothing -> extendSubstitution (x,uapply u t)
-       Just t' -> unify t t' >> extendSubstitution (x,uapply u t)
+       Nothing -> extendSubstitution (x,t)
+       Just t' -> unify t t' >> extendSubstitution (x,t)
 
-unify t1 t2 = trace ("unify ("++show t1++") ("++show t2++")")
-                (mapM_ extendSubst =<< mgu t1 t2)
+unify t1 t2 = -- trace ("unify ("++show t1++") ("++show t2++")") $
+                do u <- getSubst
+                   mapM_ extendSubst =<< mgu (uapply u t1) (uapply u t2)
 
-unifyMany ps = mapM_ extendSubst =<< mguMany ps
+unifyMany ps = do u <- getSubst
+                  mapM_ extendSubst =<< mguMany (map (uapply u) ps)
 
 
 type KCtx = [(TyName,KiSch)]
@@ -153,13 +155,20 @@ ki kctx ictx env (Var x)
                                       " backquoted variable not allowed (ki)")
 ki kctx ictx env (Var x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
-    Just kisch -> return =<< freshInst kisch -- ki vars should be simple though
-
+    Just kisch -> return =<< freshKiInst kisch -- ki vars must be simple though
+    Nothing -> do
+      ps <- lift get
+      case lookup x ps of
+        Just k -> return k
+        Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
 ki kctx ictx env (TCon x) =
   case lookup x kctx of
-    Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
-    Just kisch -> return =<< freshInst kisch
+    Just kisch -> return =<< freshKiInst kisch
+    Nothing -> do
+      ps <- lift get
+      case lookup x ps of
+        Just k -> return k
+        Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
 ki kctx ictx env (TArr t1 t2) =
   do k1 <- ki kctx ictx env t1
      k2 <- ki kctx ictx env t2
@@ -184,20 +193,41 @@ ki kctx ictx env (TFix t) =
      lift2 $ unify (KArr (Right k) k) k1
      return k
 
-freshInst sch = liftM snd (unbind sch)
+freshTyName' x = freshTyName x =<< (Var <$> fresh "k")
+
+freshTyName x k = do
+  nm <- fresh x
+  lift $ modify ((nm,k) :)
+  return nm
+
+freshKiInst sch = do
+  ((_,ts,xs), k) <- unbind sch
+  psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | x<-ts]
+  psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | x<-xs]
+  ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
+  lift $ modify ((ps++psL++psR)++)
+  return k
+
+freshTyInst sch = do
+  (vs, ty) <- unbind sch
+  psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-vs]
+  psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-vs]
+  ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
+  lift $ modify ((ps++psL++psR)++)
+  return ty
 
 
 closeKi kctx ctx as k = do -- as are extra vars that should not to generalize
-  () <- trace ("closeKi "++show k
-                     ++"\n\t"++show freeKiVars
-                     ++"\n\t"++show freeTyVars
-                     ++"\n\t"++show freeTmVars) $ return ()
-  () <- trace ("\n\t freeKiVars = "++show freeKiVars
-             ++"\n\t freeTyVars = "++show freeTyVars
-             ++"\n\t freeTmVars = "++show freeTmVars ) $ return ()
-  () <- trace ("\n\t kctx = "++show kctx
-             ++"\n\t ctx = "++show ctx ) $ return ()
-  () <- trace ("\n\t fv k = "++show(fv k::[KiName])) $ return ()
+  -- () <- trace ("closeKi "++show k
+  --                    ++"\n\t"++show freeKiVars
+  --                    ++"\n\t"++show freeTyVars
+  --                    ++"\n\t"++show freeTmVars) $ return ()
+  -- () <- trace ("\n\t freeKiVars = "++show freeKiVars
+  --            ++"\n\t freeTyVars = "++show freeTyVars
+  --            ++"\n\t freeTmVars = "++show freeTmVars ) $ return ()
+  -- () <- trace ("\n\t kctx = "++show kctx
+  --            ++"\n\t ctx = "++show ctx ) $ return ()
+  -- () <- trace ("\n\t fv k = "++show(fv k::[KiName])) $ return ()
   unless (null $ freeKiVars `intersect` freeTyVars)
     (throwError . strMsg $
        "duplicate kind/type vars "++show (freeKiVars `intersect` freeTyVars)++
@@ -288,12 +318,20 @@ ti kctx ictx ctx env (Var x)
                                  " backquoted variable not allowed (ti)")
 ti kctx ictx ctx env (Var x) =
   case lookup x (ctx++ictx) of
-    Nothing -> throwError(strMsg $ show x++" undefined var")
-    Just tysch -> return =<< freshInst tysch
+    Just tysch -> return =<< freshTyInst tysch
+    Nothing -> do
+      ps <- lift get
+      case lookup x ps of
+        Just t -> return t
+        Nothing -> throwError(strMsg $ show x++" undefined var")
 ti kctx ictx ctx env (Con x) =
   case lookup x ictx of
-    Nothing -> throwError(strMsg $ show x++" undefined con")
-    Just tysch -> return =<< freshInst tysch
+    Just tysch -> return =<< freshTyInst tysch
+    Nothing -> do
+      ps <- lift get
+      case lookup x ps of
+        Just t -> return t
+        Nothing -> throwError(strMsg $ show x++" undefined con")
 ti kctx ictx ctx env e@(In n t)
   | n < 0     = throwError(strMsg $ show e ++ " has negative number")
   | otherwise =
@@ -304,18 +342,18 @@ ti kctx ictx ctx env e@(In n t)
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
          mis <- sequence $ replicate m [ Right . Var <$> fresh "k"
-                                       , Left  . Var <$> fresh "i" ]
+                                       , Left  . Var <$> freshTyName' "i" ]
          return $ do -- fresh monad
            is <- sequence mis
-           ty1 <- Var <$> fresh "t"
+           ty1 <- Var <$> freshTyName' "t"
            lift2 $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
 ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
      r <- fresh "_r"
-     t <- fresh "t"
+     t <- freshTyName' "t"
      mphi' <- freshenMPhi kctx ictx mphi
-     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> fresh "b_")
+     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "b_" Star)
                                   Just phi -> do unbind (substBackquote env phi)
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
@@ -341,10 +379,10 @@ ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
 ti kctx ictx ctx env (MPr b) =
   do ((f,cast), Alt mphi as) <- unbind b
      r <- fresh "_r"
-     t <- fresh "t"
+     t <- freshTyName' "t"
      k <- fresh "k"
      mphi' <- freshenMPhi kctx ictx mphi
-     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> fresh "_b")
+     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "_b" Star)
                                   Just phi -> do unbind (substBackquote env phi)
      let tyf    = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
@@ -369,7 +407,7 @@ ti kctx ictx ctx env (MPr b) =
      return ty
 ti kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
-     ty1 <- Var <$> fresh "_"
+     ty1 <- Var <$> freshTyName "_" Star
      ty2 <- ti kctx ictx ((x, monoTy ty1) : ctx) env t
      return (TArr ty1 ty2)
 ti kctx ictx ctx env (App t1 t2) =
@@ -383,8 +421,12 @@ ti kctx ictx ctx env (App t1 t2) =
                  ++ "\n" ++ "ictx = " ++ show ictx
                  ++ "\n" ++ "ctx = " ++ show ctx
                 )
-     ty <- Var <$> fresh "a"
+     ty <- Var <$> freshTyName "a" Star
      lift2 $ unify (TArr ty2 ty) ty1
+     () <- trace ("KIND THING in "++show (App t1 t2)) $ return ()
+     u <- lift getSubst
+     k <- ki kctx ictx env (uapply u ty)
+     lift2 $ unify k Star
      return ty
 ti kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
@@ -416,14 +458,23 @@ tiAlts kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
      let args' = replaceSuffix args (map eitherVar is)
      let domty = foldl TApp tcon args'
      let tysch = bind is (TArr domty rngty)
-     tys' <- mapM freshInst (replicate (length as) tysch)
+     tys' <- mapM freshTyInst (replicate (length as) tysch)
      lift2 $ unifyMany (zip tys' tys)
-     return =<< freshInst tysch
+     return =<< freshTyInst tysch
 
 
-freshenPhi kctx ictx phi = snd <$> unbind (bind fvPhi phi)
+freshenPhi kctx ictx phi =
+  do ((xs,ys),phi') <- unbind (bind (fvTmPhi,fvTyPhi) phi)
+     psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | x<-ys]
+     psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | x<-xs]
+     ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
+     lift $ modify ((ps++psL++psR)++)
+     return phi'
   where
-  fvPhi = fv phi \\ (fv kctx ++ fv ictx_) :: [Name PSUT]
+  (is,ty) = unsafeUnbind phi
+  fvTmPhi = fvTmInTy ty \\ (fv is ++ fv kctx ++ fv ictx_)
+  fvTyPhi = fvTyInTy ty \\ (fv is ++ fv kctx ++ fv ictx_)
+  -- fvPhi = fv phi \\ (fv kctx ++ fv ictx_) :: [Name PSUT]
   ictx_ = filter (isUpper.head.show.fst) ictx
 
 freshenMPhi kctx ictx Nothing    = return Nothing
@@ -441,7 +492,7 @@ app2list t           = [t]
 tiAlt kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
-                 Just xt -> freshInst xt
+                 Just xt -> freshTyInst xt
      u <- trace ("++++++++"++show x++"++++++++++++++\n"++show mphi++"\n xTy = "++show xTy) $ lift getSubst
      let xty = uapply u xTy
      let xtyUnfold = unfoldTArr xty
@@ -450,7 +501,11 @@ tiAlt kctx ictx ctx env mphi (x,b) =
         Nothing  -> return (u,[],undefined,Nothing)
         Just phi -> do
           (is, bodyTy) <- unbind phi
-          t <- (Var <$> fresh "t")
+          psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-is]
+          psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-is]
+          ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
+          lift $ modify ((ps++psL++psR)++)
+          t <- Var <$> freshTyName' "t"
           lift2 $ unify (foldl TApp t $ map eitherVar is) xtyRet
           u <- lift getSubst
           let bodyTy' = uapply u bodyTy
@@ -568,7 +623,8 @@ nullState = UState [] []
 
 -- runUS = runUSwith nullState
 
-runUSwith st0 st = uapply (uSubst s) e where (e,s) = runState st st0
+runUSwith st0 st = fst (runState st st0)
+                   -- uapply (uSubst s) e where (e,s) = runState st st0
 
 runTI = runTIwith nullState []
  
