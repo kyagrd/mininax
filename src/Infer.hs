@@ -341,8 +341,8 @@ ti kctx ictx ctx env e@(In n t)
        let m = fromInteger n
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
-         mis <- sequence $ replicate m [ Right . Var <$> freshTyName' "a"
-                                       , Left  . Var <$> fresh "i" ]
+         mis <- sequence $ replicate m [ Right . Var <$> fresh "k"
+                                       , Left  . Var <$> freshTyName' "i" ]
          return $ do -- fresh monad
            is <- sequence mis
            ty1 <- Var <$> freshTyName' "t"
