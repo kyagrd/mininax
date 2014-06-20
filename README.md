@@ -1,7 +1,7 @@
 mininax
 =======
 
-* WARNING: type checking test/path.mininax will up most of your 4GB memory
+* WARNING: type checking test/path.mininax will eat up most of your 4GB memory
 
 Mininax is a prototype reference implementation of the Nax programming language,
 which is described in [my Ph.D. dissertation draft](https://dl.dropboxusercontent.com/u/2589099/thesis/Nax_KiYungAhn_thesis_draft.pdf),
