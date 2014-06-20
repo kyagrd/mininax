@@ -149,11 +149,11 @@ type KI = FreshMT (StateT [(TyName,Ki)]
 
 type KiSch = Bind ([TmName],[TyName],[KiName]) Ki
 
-ki :: KCtx -> Ctx -> Env -> Ty -> KI Ki
-ki kctx ictx env (Var x)
+ki :: Int -> KCtx -> Ctx -> Env -> Ty -> KI Ki
+ki n kctx ictx env (Var x)
    | head(show x) == '`' = throwError(strMsg $ show x++
                                       " backquoted variable not allowed (ki)")
-ki kctx ictx env (Var x) =
+ki n kctx ictx env (Var x) =
   case lookup x kctx of
     Just kisch -> return =<< freshKiInst kisch -- ki vars must be simple though
     Nothing -> do
@@ -161,7 +161,7 @@ ki kctx ictx env (Var x) =
       case lookup x ps of
         Just k -> return k
         Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
-ki kctx ictx env (TCon x) =
+ki n kctx ictx env (TCon x) =
   case lookup x kctx of
     Just kisch -> return =<< freshKiInst kisch
     Nothing -> do
@@ -169,26 +169,26 @@ ki kctx ictx env (TCon x) =
       case lookup x ps of
         Just k -> return k
         Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
-ki kctx ictx env (TArr t1 t2) =
-  do k1 <- ki kctx ictx env t1
-     k2 <- ki kctx ictx env t2
+ki n kctx ictx env (TArr t1 t2) =
+  do k1 <- ki n kctx ictx env t1
+     k2 <- ki n kctx ictx env t2
      lift2 $ unify Star k1
      lift2 $ unify Star k2
      return Star
-ki kctx ictx env (TApp t1 (Right t2)) =
-  do k1 <- ki kctx ictx env t1
-     k2 <- ki kctx ictx env t2
+ki n kctx ictx env (TApp t1 (Right t2)) =
+  do k1 <- ki n kctx ictx env t1
+     k2 <- ki n kctx ictx env t2
      k <- Var <$> fresh "k"
      lift2 $ unify (KArr (Right k2) k) k1
      return k
-ki kctx ictx env (TApp t1 (Left e2)) =
-  do k1 <- ki kctx ictx env t1
-     t2 <- ti kctx ictx [] env e2
+ki n kctx ictx env (TApp t1 (Left e2)) =
+  do k1 <- ki n kctx ictx env t1
+     t2 <- ti (n+1) kctx ictx [] env e2
      k <- Var <$> fresh "k"
      lift2 $ unify (KArr (Left t2) k) k1
      return k
-ki kctx ictx env (TFix t) =
-  do k1 <- ki kctx ictx env t
+ki n kctx ictx env (TFix t) =
+  do k1 <- ki n kctx ictx env t
      k <- Var <$> fresh "k"
      lift2 $ unify (KArr (Right k) k) k1
      return k
@@ -312,11 +312,11 @@ unfoldTApp ty           = [Right ty]
 eitherVar = either (Left . Var) (Right . Var)
 
 
-ti :: KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
-ti kctx ictx ctx env (Var x)
+ti :: Int -> KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
+ti n kctx ictx ctx env (Var x)
        | head(show x) == '`' = throwError(strMsg $ show x++
                                  " backquoted variable not allowed (ti)")
-ti kctx ictx ctx env (Var x) =
+ti n kctx ictx ctx env (Var x) =
   case lookup x (ctx++ictx) of
     Just tysch -> return =<< freshTyInst tysch
     Nothing -> do
@@ -324,7 +324,7 @@ ti kctx ictx ctx env (Var x) =
       case lookup x ps of
         Just t -> return t
         Nothing -> throwError(strMsg $ show x++" undefined var")
-ti kctx ictx ctx env (Con x) =
+ti n kctx ictx ctx env (Con x) =
   case lookup x ictx of
     Just tysch -> return =<< freshTyInst tysch
     Nothing -> do
@@ -332,23 +332,23 @@ ti kctx ictx ctx env (Con x) =
       case lookup x ps of
         Just t -> return t
         Nothing -> throwError(strMsg $ show x++" undefined con")
-ti kctx ictx ctx env e@(In n t)
-  | n < 0     = throwError(strMsg $ show e ++ " has negative number")
+ti n kctx ictx ctx env e@(In m t)
+  | m < 0     = throwError(strMsg $ show e ++ " has negative number")
   | otherwise =
-    do ty <- ti kctx ictx ctx env t
+    do ty <- ti n kctx ictx ctx env t
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of " ++ show t)
-       let m = fromInteger n
+       let m_ = fromInteger m
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
-         mis <- sequence $ replicate m [ Right . Var <$> fresh "k"
-                                       , Left  . Var <$> freshTyName' "i" ]
+         mis <- sequence $ replicate m_ [ Right . Var <$> fresh "k"
+                                        , Left  . Var <$> freshTyName' "i" ]
          return $ do -- fresh monad
            is <- sequence mis
            ty1 <- Var <$> freshTyName' "t"
            lift2 $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
-ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
+ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
      r <- fresh "_r"
      t <- freshTyName' "t"
@@ -367,7 +367,7 @@ ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      let ctx' = (f,tyfsch) : ctx
      () <- trace ("\tkctx' = "++show kctx') $ return ()
      () <- trace ("\tctx' = "++show ctx') $ return ()
-     tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
+     tytm' <- tiAlts n kctx' ictx ctx' env (Alt mphi' as)
      lift2 $ unify tytm tytm'
      u <- lift getSubst
      let ty = uapply u $
@@ -376,7 +376,7 @@ ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MIt b) )
      return ty
-ti kctx ictx ctx env (MPr b) =
+ti n kctx ictx ctx env (MPr b) =
   do ((f,cast), Alt mphi as) <- unbind b
      r <- fresh "_r"
      t <- freshTyName' "t"
@@ -396,7 +396,7 @@ ti kctx ictx ctx env (MPr b) =
                                            closeTy kctx' ictx tyret
                                return $ bind (union is vs) tyf
      let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
-     tytm' <- tiAlts kctx' ictx ctx' env (Alt mphi' as)
+     tytm' <- tiAlts n kctx' ictx ctx' env (Alt mphi' as)
      lift2 $ unify tytm tytm'
      u <- lift getSubst
      let ty = uapply u $
@@ -405,16 +405,16 @@ ti kctx ictx ctx env (MPr b) =
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MPr b) )
      return ty
-ti kctx ictx ctx env (Lam b) =
+ti n kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> freshTyName "_" Star
-     ty2 <- ti kctx ictx ((x, monoTy ty1) : ctx) env t
+     ty2 <- ti n kctx ictx ((x, monoTy ty1) : ctx) env t
      return (TArr ty1 ty2)
-ti kctx ictx ctx env (App t1 t2) =
-  do ty1 <- ti kctx ictx ctx env t1
+ti n kctx ictx ctx env (App t1 t2) =
+  do ty1 <- ti n kctx ictx ctx env t1
              `catchErrorThrowWithMsg`
                 (++ "\n\t" ++ "when checking type of " ++ show t1)
-     ty2 <- ti kctx ictx ctx env t2
+     ty2 <- ti n kctx ictx ctx env t2
              `catchErrorThrowWithMsg`
                 (++ "\n\t" ++ "when checking type of " ++ show t2
                  ++ "\n" ++ "kctx = " ++ show kctx
@@ -423,32 +423,33 @@ ti kctx ictx ctx env (App t1 t2) =
                 )
      ty <- Var <$> freshTyName "a" Star
      lift2 $ unify (TArr ty2 ty) ty1
-     () <- trace ("KIND THING in "++show (App t1 t2)) $ return ()
-     u <- lift getSubst
-     k <- ki kctx ictx env (uapply u ty)
-     lift2 $ unify k Star
+     when (n == 0) $ do
+       () <- trace ("KIND THING in "++show (App t1 t2)) $ return ()
+       u <- lift getSubst
+       k <- ki n kctx ictx env (uapply u ty)
+       lift2 $ unify k Star
      return ty
-ti kctx ictx ctx env (Let b) =
+ti n kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
-     ty <- ti kctx ictx ctx env t1
+     ty <- ti n kctx ictx ctx env t1
             `catchErrorThrowWithMsg`
                (++ "\n\t" ++ "when checking type of " ++ show t1)
      u <- lift getSubst
      tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
-     ti kctx ictx ((x, tysch) : ctx) env t2
-ti kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
-ti kctx ictx ctx env e@(Alt Nothing as) = tiAlts kctx ictx ctx env e
-ti kctx ictx ctx env (Alt (Just phi) as) =
+     ti n kctx ictx ((x, tysch) : ctx) env t2
+ti n kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
+ti n kctx ictx ctx env e@(Alt Nothing as) = tiAlts n kctx ictx ctx env e
+ti n kctx ictx ctx env (Alt (Just phi) as) =
   do phi <- freshenPhi kctx ictx phi
-     tiAlts kctx ictx ctx env (Alt (Just phi) as)
+     tiAlts n kctx ictx ctx env (Alt (Just phi) as)
 
 
-tiAlts kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
-  do tys <- mapM (tiAlt kctx ictx ctx env Nothing) as
+tiAlts n kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
+  do tys <- mapM (tiAlt n kctx ictx ctx env Nothing) as
      lift2 $ unifyMany (zip tys (tail tys))
      return (head tys)
-tiAlts kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
-  do tys <- mapM (tiAlt kctx ictx ctx env (Just phi)) as
+tiAlts n kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
+  do tys <- mapM (tiAlt n kctx ictx ctx env (Just phi)) as
      u <- lift getSubst
      let (Right tcon : args) =
             tApp2list $ case (head tys) of TArr t _ -> uapply u t
@@ -489,7 +490,7 @@ app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]
 
 
-tiAlt kctx ictx ctx env mphi (x,b) =
+tiAlt n kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
                  Just xt -> freshTyInst xt
@@ -552,11 +553,11 @@ tiAlt kctx ictx ctx env mphi (x,b) =
      (ns,t) <- unbind b
      let ctx' = trace (show ns ++", "++ show xtyArgs') $ zip ns (map monoTy xtyArgs') ++ ctx
      () <- trace "zzaaa" $ return ()
-     domty <- ti kctx' ictx' ctx' env (foldl1 App (Con x : map Var ns))
+     domty <- ti n kctx' ictx' ctx' env (foldl1 App (Con x : map Var ns))
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of "
                   ++ show (foldl1 App (Con x : map Var ns)))
-     rngty <- ti kctx' ictx' ctx' env t
+     rngty <- ti n kctx' ictx' ctx' env t
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of " ++ show t)
      () <- trace ("zzaaa2\t"++show xtyRet++" =?= "++show domty) $ return ()
@@ -631,9 +632,9 @@ runTI = runTIwith nullState []
 runTIwith stUS st = runUSwith stUS . runErrorT . flip evalStateT st . runFreshMT
 
 
-ti' ctx = runTI . ti [] [] [] ctx
+ti' ctx = runTI . ti 0 [] [] [] ctx
 
-ty = runTI $ ti [] [] [] [] (lam "x" (Var "x"))
+ty = runTI $ ti 0 [] [] [] [] (lam "x" (Var "x"))
 
 
 unbindSch sch = snd (unsafeUnbind sch)
