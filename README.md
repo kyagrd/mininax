@@ -1,19 +1,19 @@
 mininax
 =======
 
-Mininax is a prototype reference implementaton of the Nax programing langauge,
+Mininax is a prototype reference implementation of the Nax programming language,
 which is described in [my Ph.D. dissertation draft](https://dl.dropboxusercontent.com/u/2589099/thesis/Nax_KiYungAhn_thesis_draft.pdf),
-but only implements the core part of the language without syntactic suguars
+but only implements the core part of the language without syntactic sugars
 (e.g., type synonyms, fixpoint derivation). There are few other differences
-in the syntax compared to the version of the langauge in my dissertation.
+in the syntax compared to the version of the language in my dissertation.
 Mininax supports case function syntax rather than case expression syntax.
 A case function is a list of case alternatives that awaits an argument
 to scrutinize. For example, `{ False -> e1; True -> e2 }` is a case function,
 which means `\ x -> case x of { False -> e1; True -> e2 }` if you had case expressions. 
-In addition, mininax has better GADT delcleration syntax than the language syntax
+In addition, mininax has better GADT declaration syntax than the language syntax
 described in my Ph.D. dissertation.
 
-Here is an example miniax code.
+Here is an example mininax code.
 ```haskell
 data Unit = Unit ;                                                              
 data Bool = False | True ;                                                      
@@ -233,7 +233,7 @@ Available options:
   FILE                     File path argument
 ```
 
-Using either `-e` option or `-a` optoin,
+Using either `-e` option or `-a` option,
 you can examine values of top level definitions.
 
 ```
