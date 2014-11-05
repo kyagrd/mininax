@@ -19,6 +19,7 @@ import Syntax
 
 import Data.Char
 import Data.List
+import Data.Maybe
 import Control.Applicative
 import Control.Monad.Trans
 import Control.Monad.Error
@@ -210,10 +211,12 @@ freshKiInst sch = do
 
 freshTyInst sch = do
   (vs, ty) <- unbind sch
-  psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-vs]
-  psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-vs]
-  ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
-  lift $ modify ((ps++psL++psR)++)
+  -- psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-vs]
+  -- psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-vs]
+  -- ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
+  -- lift $ modify ((ps++psL++psR)++)
+  let ps = [(x,k) | Right(x,Embed k)<-vs] ++ [(x,t) | Left (x,Embed t)<-vs]
+  lift $ modify (ps++)
   return ty
 
 
@@ -252,7 +255,10 @@ closeTy kctx ctx ty = do
     (throwError . strMsg $
        "duplicate type/term vars "++show (freeLvars `intersect` freeRvars)++
        "when generalizing "++show ty)
-  return $ bind (map Right freeRvars ++ map Left freeLvars) ty
+  ps <- lift get
+  let psR = [Right(x, Embed $ fromJust $ lookup x ps) | x <- freeRvars]
+      psL = [Left (x, Embed $ fromJust $ lookup x ps) | x <- freeLvars]
+  return $ bind (psR++psL) ty
   where
   freeLvars = nub (fvTmInTy ty) \\ (fv ctx ++ fv kctx)
   freeRvars = nub (fvTyInTy ty) \\ (fv ctx ++ fv kctx)
@@ -295,7 +301,7 @@ type TI = FreshMT (StateT [(TyName,Ki)]
                            (ErrorT UnifyError
                                    (State (UnificationState TyName Ty))))
 
-type TySch = Bind [Either TmName TyName] Ty
+type TySch = Bind [Either (TmName,Embed Ty) (TyName,Embed Ki)] Ty
 
 
 kargs = unfoldr (\k -> case k of { KArr k1 k2 -> Just(k1,k2) ; _ -> Nothing })
@@ -348,6 +354,7 @@ ti n kctx ictx ctx env e@(In m t)
            ty1 <- Var <$> freshTyName' "t"
            lift2 $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
+{- --------------------------------------------------------------
 ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
      r <- fresh "_r"
@@ -405,6 +412,7 @@ ti n kctx ictx ctx env (MPr b) =
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MPr b) )
      return ty
+-} -------------------------------------------------------------
 ti n kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> freshTyName "_" Star
@@ -438,6 +446,7 @@ ti n kctx ictx ctx env (Let b) =
      tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
      ti n kctx ictx ((x, tysch) : ctx) env t2
 ti n kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
+{- -----------------------------------------------------------------------
 ti n kctx ictx ctx env e@(Alt Nothing as) = tiAlts n kctx ictx ctx env e
 ti n kctx ictx ctx env (Alt (Just phi) as) =
   do phi <- freshenPhi kctx ictx phi
@@ -462,7 +471,7 @@ tiAlts n kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
      tys' <- mapM freshTyInst (replicate (length as) tysch)
      lift2 $ unifyMany (zip tys' tys)
      return =<< freshTyInst tysch
-
+-} ---------------------------------------------------------------
 
 freshenPhi kctx ictx phi =
   do ((xs,ys),phi') <- unbind (bind (fvTmPhi,fvTyPhi) phi)
@@ -489,7 +498,7 @@ tApp2list ty             = [Right ty]
 app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]
 
-
+{-
 tiAlt n kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
@@ -612,7 +621,7 @@ tiAlt n kctx ictx ctx env mphi (x,b) =
          return (foldl TApp t' (map eitherVar is) `TArr` bodyTy')
   -- catching error from do ...
   `catchErrorThrowWithMsg` (++ "\n\t" ++ "when checking case " ++ show x)
-
+-}
 
 
 lam x t = Lam (bind x t)

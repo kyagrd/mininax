@@ -29,7 +29,8 @@ executable mininax
     build-tools: cpphs -any
     hs-source-dirs: src
     other-modules: Syntax InferDec Infer Parser
-    ghc-options: -Wall -O2 -cpp -pgmPcpphs -optP--cpp
+    extensions: CPP
+    ghc-options: -Wall -O2 -pgmPcpphs -optP--cpp
     ghc-prof-options: -Wall -rtsopts -auto-all -caf-all -O2 -cpp -pgmPcpphs -optP--cpp
  
 test-suite test-mininax
@@ -45,4 +46,5 @@ test-suite test-mininax
     cpp-options: -DMAIN_FUNCTION=testMain
     hs-source-dirs: src
     other-modules: Syntax InferDec Infer Parser
-    ghc-options: -Wall -O2 -cpp -pgmPcpphs -optP--cpp
+    extensions: CPP
+    ghc-options: -Wall -O2 -pgmPcpphs -optP--cpp
