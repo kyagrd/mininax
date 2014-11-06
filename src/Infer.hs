@@ -253,13 +253,20 @@ closeTy kctx ctx ty = do
        "duplicate type/term vars "++show (freeLvars `intersect` freeRvars)++
        "when generalizing "++show ty)
   ps <- lift get
-  let psR = [Right(x, Embed $ fromJust $ lookup x ps) | x <- freeRvars]
-      psL = [Left (x, Embed $ fromJust $ lookup x ps) | x <- freeLvars]
+  psR <- sequence $ [ do k <- case lookup x ps of
+                                Just k -> return k
+                                Nothing -> Var <$> fresh "k"
+                         return $ Right(x, Embed k)
+                     | x <- freeRvars ]
+  psL <- sequence $ [ do t <- case lookup x ps of
+                                Just t -> return t
+                                Nothing -> Var <$> freshTyName' "t"
+                         return $ Left(x, Embed t)
+                     | x <- freeLvars ]
   return $ bind (psR++psL) ty
   where
   freeLvars = nub (fvTmInTy ty) \\ (fv ctx ++ fv kctx)
   freeRvars = nub (fvTyInTy ty) \\ (fv ctx ++ fv kctx)
-
 
 -- assumes that it is applied only to kinds
 fvKi (Var x)              = [x]
