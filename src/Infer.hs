@@ -49,6 +49,7 @@ instance (Eq n, Show n, Show a, HasVar n a) => Unify n a String where
 instance (Eq n, Show n, Show a, HasVar n a) => Unify n a (Name s) where
    unifyStep _ = unifyStepEq
 
+-- TODO what if there is Embed inside n ????? TODO not handling this
 instance (Alpha n, Eq n, Show n, HasVar n PSUT) => Unify n PSUT (Bind n PSUT) where
    unifyStep _ b1 b2 
        | b1 `aeq` b2 = return ()
@@ -211,10 +212,6 @@ freshKiInst sch = do
 
 freshTyInst sch = do
   (vs, ty) <- unbind sch
-  -- psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-vs]
-  -- psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-vs]
-  -- ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
-  -- lift $ modify ((ps++psL++psR)++)
   let ps = [(x,k) | Right(x,Embed k)<-vs] ++ [(x,t) | Left (x,Embed t)<-vs]
   lift $ modify (ps++)
   return ty
@@ -317,6 +314,10 @@ unfoldTApp ty           = [Right ty]
 
 eitherVar = either (Left . Var) (Right . Var)
 
+eitherFst ep = fst $ case ep of { Left p -> p; Right p -> p }
+
+stripEither (Left  x) = x
+stripEither (Right x) = x
 
 ti :: Int -> KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
 ti n kctx ictx ctx env (Var x)
@@ -354,23 +355,26 @@ ti n kctx ictx ctx env e@(In m t)
            ty1 <- Var <$> freshTyName' "t"
            lift2 $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
-{- --------------------------------------------------------------
 ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
      r <- fresh "_r"
      t <- freshTyName' "t"
      mphi' <- freshenMPhi kctx ictx mphi
-     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "b_" Star)
-                                  Just phi -> do unbind (substBackquote env phi)
+     (is, tyret) <- case mphi' of
+                      Nothing  -> (,) [] <$> (Var <$> freshTyName "b_" Star)
+                      Just phi -> do unbind (substBackquote env phi)
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
      k <- fresh "k"
      let kctx' = (r, monoKi $ Var k) : kctx
      tyfsch <- case mphi' of
                  Nothing -> return (monoTy tyf)
-                 _       -> do (vs,_) <- unsafeUnbind <$>
-                                           closeTy kctx' ictx tyret
-                               return $ bind (union is vs) tyf
+                 _       ->
+                   do (vs,_) <- unsafeUnbind <$> closeTy kctx' ictx tyret
+                      is' <- mapM freshenTArgName $
+                              [ i | i <- is,
+                                    not(stripEither i `elem` map eitherFst vs) ]
+                      return $ bind (is' ++ vs) tyf
      let ctx' = (f,tyfsch) : ctx
      () <- trace ("\tkctx' = "++show kctx') $ return ()
      () <- trace ("\tctx' = "++show ctx') $ return ()
@@ -389,8 +393,9 @@ ti n kctx ictx ctx env (MPr b) =
      t <- freshTyName' "t"
      k <- fresh "k"
      mphi' <- freshenMPhi kctx ictx mphi
-     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "_b" Star)
-                                  Just phi -> do unbind (substBackquote env phi)
+     (is, tyret) <- case mphi' of
+                      Nothing  -> (,) [] <$> (Var <$> freshTyName "_b" Star)
+                      Just phi -> do unbind (substBackquote env phi)
      let tyf    = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
                   foldl TApp (TFix (Var t)) (map eitherVar is)
@@ -399,10 +404,14 @@ ti n kctx ictx ctx env (MPr b) =
      let kctx' = (r, bind ([],[],[]) $ Var k) : kctx
      tyfsch <- case mphi' of
                  Nothing -> return (monoTy tyf)
-                 _       -> do (vs,_) <- unsafeUnbind <$>
-                                           closeTy kctx' ictx tyret
-                               return $ bind (union is vs) tyf
-     let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
+                 _       ->
+                   do (vs,_) <- unsafeUnbind <$> closeTy kctx' ictx tyret
+                      is' <- mapM freshenTArgName $
+                              [ i | i <- is,
+                                    not(stripEither i `elem` map eitherFst vs) ]
+                      return $ bind (is' ++ vs) tyf
+     is' <- mapM freshenTArgName is
+     let ctx' = (f,tyfsch) : (cast,bind is' tycast) : ctx
      tytm' <- tiAlts n kctx' ictx ctx' env (Alt mphi' as)
      lift2 $ unify tytm tytm'
      u <- lift getSubst
@@ -412,7 +421,6 @@ ti n kctx ictx ctx env (MPr b) =
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MPr b) )
      return ty
--} -------------------------------------------------------------
 ti n kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> freshTyName "_" Star
@@ -446,12 +454,10 @@ ti n kctx ictx ctx env (Let b) =
      tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
      ti n kctx ictx ((x, tysch) : ctx) env t2
 ti n kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
-{- -----------------------------------------------------------------------
 ti n kctx ictx ctx env e@(Alt Nothing as) = tiAlts n kctx ictx ctx env e
 ti n kctx ictx ctx env (Alt (Just phi) as) =
   do phi <- freshenPhi kctx ictx phi
      tiAlts n kctx ictx ctx env (Alt (Just phi) as)
-
 
 tiAlts n kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
   do tys <- mapM (tiAlt n kctx ictx ctx env Nothing) as
@@ -467,11 +473,19 @@ tiAlts n kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
         $ throwError(strMsg $ "too many indices in "++show phi)
      let args' = replaceSuffix args (map eitherVar is)
      let domty = foldl TApp tcon args'
-     let tysch = bind is (TArr domty rngty)
+     is' <- mapM freshenTArgName is
+     let tysch = bind is' (TArr domty rngty) :: TySch
      tys' <- mapM freshTyInst (replicate (length as) tysch)
      lift2 $ unifyMany (zip tys' tys)
      return =<< freshTyInst tysch
--} ---------------------------------------------------------------
+
+-- freshen the annotation of TArgName:
+-- fesshily generate bindings for the type variabel or the term-index variable.
+-- does not freshen the variable itself
+freshenTArgName (Right x) = do k <- fresh "k"
+                               return $ Right (x, Embed $ Var k)
+freshenTArgName (Left  x) = do t <- freshTyName' "_t"
+                               return $ Left  (x, Embed $ Var t)
 
 freshenPhi kctx ictx phi =
   do ((xs,ys),phi') <- unbind (bind (fvTmPhi,fvTyPhi) phi)
@@ -498,7 +512,6 @@ tApp2list ty             = [Right ty]
 app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]
 
-{-
 tiAlt n kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
@@ -621,7 +634,6 @@ tiAlt n kctx ictx ctx env mphi (x,b) =
          return (foldl TApp t' (map eitherVar is) `TArr` bodyTy')
   -- catching error from do ...
   `catchErrorThrowWithMsg` (++ "\n\t" ++ "when checking case " ++ show x)
--}
 
 
 lam x t = Lam (bind x t)
