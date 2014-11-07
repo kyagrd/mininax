@@ -37,7 +37,7 @@ test-suite test-mininax
     build-depends: BNFC-meta >= 0.4.0.1, QuickCheck -any,
                    RepLib >= 0.5.3 && < 0.6,
                    base >= 4.3 && < 5, containers -any, mtl -any,
-                   optparse-applicative >= 0.9,
+                   optparse-applicative >= 0.9 && < 0.10,
                    unbound >= 0.4.2
     type: exitcode-stdio-1.0
     main-is: Main.hs
