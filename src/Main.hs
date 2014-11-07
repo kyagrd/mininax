@@ -194,13 +194,13 @@ greet (CmdArgs{..}) = do
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
   let (kctx,ctx) = tiProg program
-  print "================================"
-  putStrLn ("length kctx = "++show(length kctx))
-  mapM_ print (reverse $ kctx)
-  print "================================"
-  putStrLn ("length ctx = "++show(length ctx))
-  mapM_ print (reverse $ ctx)
-  print "================================"
+  -- print "================================"
+  -- putStrLn ("length kctx = "++show(length kctx))
+  -- mapM_ print (reverse $ kctx)
+  -- print "================================"
+  -- putStrLn ("length ctx = "++show(length ctx))
+  -- mapM_ print (reverse $ ctx)
+  -- print "================================"
   -- let uapply_u = uapply u
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
