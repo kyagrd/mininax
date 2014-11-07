@@ -31,7 +31,9 @@ import Control.Monad.Error
 -- import Control.Monad.Identity
 import Data.List (stripPrefix, foldl')
 import System.Exit (exitFailure)
+#ifdef MAIN_FUNCTION
 import Test.QuickCheck.All (quickCheckAll)
+#endif
 import Language.LBNF.Runtime hiding (printTree)
 import Generics.RepLib.Unify hiding (solveUnification)
 import Unbound.LocallyNameless (runFreshMT)
@@ -192,13 +194,13 @@ greet (CmdArgs{..}) = do
   mp <- hProg h
   let program = case mp of { Ok p -> p; Bad msg -> error msg }
   let (kctx,ctx) = tiProg program
-  -- print "================================"
-  -- putStrLn ("length kctx = "++show(length kctx))
-  -- mapM_ print (reverse $ kctx)
-  -- print "================================"
-  -- putStrLn ("length ctx = "++show(length ctx))
-  -- mapM_ print (reverse $ ctx)
-  -- print "================================"
+  print "================================"
+  putStrLn ("length kctx = "++show(length kctx))
+  mapM_ print (reverse $ kctx)
+  print "================================"
+  putStrLn ("length ctx = "++show(length ctx))
+  mapM_ print (reverse $ ctx)
+  print "================================"
   -- let uapply_u = uapply u
   when (flagAll || flagKi || (not flagEv && not flagTi))
      $ do { mapM_ putStrLn
@@ -258,16 +260,16 @@ su3 = solveUnification [(term2Tm[term|(\x->a)|],term2Tm[term|(\x->(\x->x)a)|])]
 su4 = solveUnification [(type2Ty[type|A { (\x->x) }|]
                         ,type2Ty[type|A { (\x->x)(\x->x) }|])]
 
--- Entry point for unit tests.
-testMain = do
-    allPass <- $quickCheckAll -- Run QuickCheck on all prop_ functions
-    unless allPass exitFailure
-
 -- This is a clunky, but portable, way to use the same Main module file
 -- for both an application and for unit tests.
 -- MAIN_FUNCTION is preprocessor macro set to exeMain or testMain.
 -- That way we can use the same file for both an application and for tests.
 #ifndef MAIN_FUNCTION
 #define MAIN_FUNCTION exeMain
+#else
+-- Entry point for unit tests.
+testMain = do
+    allPass <- $quickCheckAll -- Run QuickCheck on all prop_ functions
+    unless allPass exitFailure
 #endif
 main = MAIN_FUNCTION
