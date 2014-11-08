@@ -156,10 +156,9 @@ cmdArgs = CmdArgs <$> kiFlag <*> tiFlag <*> evFlag <*> allFlag <*> filepathArg
   allFlag = switch
      $ long "all" <> short 'a'
     <> help "Kind Infer, Type Infer, and Evaluate the program"
-  filepathArg = argument (return . str)
+  filepathArg = optional $ argument str
      $ metavar "FILE"
     <> help "File path argument"
-    <> value Nothing
 
 
 tiProg (Prog ds) = (kctx,ictx)

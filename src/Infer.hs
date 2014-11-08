@@ -353,11 +353,11 @@ ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      r <- fresh "_r"
      t <- freshTyName' "t"
      mphi' <- freshenMPhi kctx ictx mphi
+     k <- fresh "k"
      (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "b_" Star)
                                   Just phi -> do unbind (substBackquote env phi)
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
      let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
-     k <- fresh "k"
      let kctx' = (r, monoKi $ Var k) : kctx
      tyfsch <- case mphi' of
                  Nothing -> return (monoTy tyf)
@@ -385,17 +385,18 @@ ti n kctx ictx ctx env (MPr b) =
      (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "_b" Star)
                                   Just phi -> do unbind (substBackquote env phi)
      let tyf    = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
-     let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
-                  foldl TApp (TFix (Var t)) (map eitherVar is)
-     let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is)
-                  `TArr` tyret
-     let kctx' = (r, bind ([],[],[]) $ Var k) : kctx
+     let tytm   = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
+     let kctx' = (r, monoKi $ Var k) : kctx
      tyfsch <- case mphi' of
                  Nothing -> return (monoTy tyf)
                  _       -> do (vs,_) <- unsafeUnbind <$>
                                            closeTy kctx' ictx tyret
                                return $ bind (union is vs) tyf
+     let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
+                  foldl TApp (TFix (Var t)) (map eitherVar is)
      let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
+     () <- trace ("\tkctx' = "++show kctx') $ return ()
+     () <- trace ("\tctx' = "++show ctx') $ return ()
      tytm' <- tiAlts n kctx' ictx ctx' env (Alt mphi' as)
      lift2 $ unify tytm tytm'
      u <- lift getSubst
