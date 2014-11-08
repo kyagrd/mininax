@@ -410,6 +410,7 @@ ti n kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> freshTyName "_" Star
      ty2 <- ti n kctx ictx ((x, monoTy ty1) : ctx) env t
+     lift2 . unify Star =<< ki n kctx ictx env ty2
      return (TArr ty1 ty2)
 ti n kctx ictx ctx env (App t1 t2) =
   do ty1 <- ti n kctx ictx ctx env t1
@@ -424,11 +425,6 @@ ti n kctx ictx ctx env (App t1 t2) =
                 )
      ty <- Var <$> freshTyName "a" Star
      lift2 $ unify (TArr ty2 ty) ty1
-     when (n == 0) $ do
-       () <- trace ("KIND THING in "++show (App t1 t2)) $ return ()
-       u <- lift getSubst
-       k <- ki n kctx ictx env (uapply u ty)
-       lift2 $ unify k Star
      return ty
 ti n kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
