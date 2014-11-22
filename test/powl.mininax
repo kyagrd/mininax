@@ -3,6 +3,5 @@ data Pair a b = Pair a b ;
 data P r a = PN | PC a (r (Pair a a)) ;
 -- Use (In 1 ...) for recursive values with one index
 pnil = In 1 PN ;
--- pcons = \x -> \xs -> In 1 (PC x xs) ;
-ttt = \x -> In 1 (PC x pnil) ;
+pcons = \x -> \xs -> In 1 (PC x xs) ;
 

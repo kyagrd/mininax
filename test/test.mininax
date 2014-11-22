@@ -134,6 +134,7 @@ data YY : * -> * where
   ; DD3 : (b -> a) -> b -> YY a
   } ;
 
+
 -- pppp = mit add { S n -> n } ; -- must fail
 
 -- z10 = { D1 n   -> succ n

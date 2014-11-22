@@ -1,0 +1,19 @@
+-- vim: sw=2: ts=2: expandtab: syntax=haskell:
+data N r = Z | S r ;
+-- Use (In 0 ...) for regular recursive values without any index
+zero = In 0 Z ;
+succ = \n -> In 0 (S n) ;
+
+data V a r : { Mu N } -> * where
+  { VN : V a r { `zero }
+  ; VC : a -> r { n } -> V a r { `succ n }
+  } ;
+
+vnil = In 1 VN ;
+vcons = \x -> \xs -> In 1 (VC x xs) ;
+
+vmap = \f -> mit map { {n} . Mu (V b) {n} }
+                 { VN      -> vnil
+                 ; VC x xs -> vcons (f x) (map xs)
+                 } ;
+

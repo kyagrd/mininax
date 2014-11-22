@@ -178,42 +178,49 @@ ki n kctx ictx env (TArr t1 t2) =
 ki n kctx ictx env (TApp t1 (Right t2)) =
   do k1 <- ki n kctx ictx env t1
      k2 <- ki n kctx ictx env t2
-     k <- Var <$> fresh "k"
+     k <- Var <$> fresh "k_TApp1_"
      lift2 $ unify (KArr (Right k2) k) k1
      return k
 ki n kctx ictx env (TApp t1 (Left e2)) =
   do k1 <- ki n kctx ictx env t1
      t2 <- ti (n+1) kctx ictx [] env e2
-     k <- Var <$> fresh "k"
+     k <- Var <$> fresh "k_TApp2_"
      lift2 $ unify (KArr (Left t2) k) k1
      return k
 ki n kctx ictx env (TFix t) =
   do k1 <- ki n kctx ictx env t
-     k <- Var <$> fresh "k"
+     k <- Var <$> fresh "k_TFix_"
      lift2 $ unify (KArr (Right k) k) k1
      return k
+
+
+freshTmName' x = freshTmName x =<< (Var <$> freshTyName "t" Star)
+
+freshTmName x t = do nm <- fresh x
+                     lift $ modify ((nm,t) :)
+                     return nm
+
 
 freshTyName' x = freshTyName x =<< (Var <$> fresh "k")
 
 freshTyName x k = do
   nm <- fresh x
   lift $ modify ((nm,k) :)
+  () <- trace ("\nfreshTyName: adding "++show (nm,k)++" to ps") $ return ()
   return nm
 
 freshKiInst sch = do
   ((_,ts,xs), k) <- unbind sch
-  psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | x<-ts]
-  psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | x<-xs]
-  ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
-  lift $ modify ((ps++psL++psR)++)
+  psR <- sequence $ [(,) x <$> (Var <$> fresh "k_KiInstR_") | x<-ts]
+  psL <- sequence $ [(,) x <$> (Var <$> freshTyName "t_KiInstL_" Star) | x<-xs]
+  lift $ modify ((psL++psR)++)
   return k
 
 freshTyInst sch = do
   (vs, ty) <- unbind sch
-  psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-vs]
-  psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-vs]
-  ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
-  lift $ modify ((ps++psL++psR)++)
+  psR <- sequence $ [(,) x <$> (Var <$> fresh "k_TyInstR_") | Right x<-vs]
+  psL <- sequence $ [(,) x <$> (Var <$> freshTyName "t_TyInstL_" Star) | Left x<-vs]
+  lift $ modify ((psL++psR)++)
   return ty
 
 
@@ -341,8 +348,8 @@ ti n kctx ictx ctx env e@(In m t)
        let m_ = fromInteger m
        foldr mplus (throwError(strMsg $ show e ++ " has incorrect number")) $ do
          -- list monad (trying all combinations of Right and Left)
-         mis <- sequence $ replicate m_ [ Right . Var <$> fresh "k"
-                                        , Left  . Var <$> freshTyName' "i" ]
+         mis <- sequence $ replicate m_ [ Right . Var <$> freshTyName' "t_InR_"
+                                        , Left  . Var <$> freshTmName "i" Star]
          return $ do -- fresh monad
            is <- sequence mis
            ty1 <- Var <$> freshTyName' "t"
@@ -350,10 +357,10 @@ ti n kctx ictx ctx env e@(In m t)
            return $ foldl TApp (TFix ty1) is
 ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
-     r <- fresh "_r"
+     k <- fresh "k_MIt_"
+     r <- freshTyName "_r" (Var k)
      t <- freshTyName' "t"
      mphi' <- freshenMPhi kctx ictx mphi
-     k <- fresh "k"
      (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "b_" Star)
                                   Just phi -> do unbind (substBackquote env phi)
      let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
@@ -361,9 +368,15 @@ ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      let kctx' = (r, monoKi $ Var k) : kctx
      tyfsch <- case mphi' of
                  Nothing -> return (monoTy tyf)
-                 _       -> do (vs,_) <- unsafeUnbind <$>
-                                           closeTy kctx' ictx tyret
-                               return $ bind (union is vs) tyf
+                 _       ->
+                   do (vs,_) <- unsafeUnbind <$> closeTy kctx' ictx tyret
+                      psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-(is++vs)]
+                      psL <- sequence $ [(,) x <$> (Var <$> freshTyName' "t") | Left x<-(is++vs)]
+                      lift $ modify ((psL++psR)++)
+                      () <- trace ("\tis = "++show is) $ return ()
+                      () <- trace ("\tvs = "++show vs) $ return ()
+                      () <- trace ("\ttyf = "++show tyf) $ return ()
+                      return $ bind (union is vs) tyf
      let ctx' = (f,tyfsch) : ctx
      () <- trace ("\tkctx' = "++show kctx') $ return ()
      () <- trace ("\tctx' = "++show ctx') $ return ()
@@ -378,9 +391,9 @@ ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
      return ty
 ti n kctx ictx ctx env (MPr b) =
   do ((f,cast), Alt mphi as) <- unbind b
-     r <- fresh "_r"
+     k <- fresh "k_MPr_"
+     r <- freshTyName "_r" (Var k)
      t <- freshTyName' "t"
-     k <- fresh "k"
      mphi' <- freshenMPhi kctx ictx mphi
      (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "_b" Star)
                                   Just phi -> do unbind (substBackquote env phi)
@@ -389,9 +402,15 @@ ti n kctx ictx ctx env (MPr b) =
      let kctx' = (r, monoKi $ Var k) : kctx
      tyfsch <- case mphi' of
                  Nothing -> return (monoTy tyf)
-                 _       -> do (vs,_) <- unsafeUnbind <$>
-                                           closeTy kctx' ictx tyret
-                               return $ bind (union is vs) tyf
+                 _       ->
+                   do (vs,_) <- unsafeUnbind <$> closeTy kctx' ictx tyret
+                      psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-(is++vs)]
+                      psL <- sequence $ [(,) x <$> (Var <$> freshTyName' "t") | Left x<-(is++vs)]
+                      lift $ modify ((psL++psR)++)
+                      () <- trace ("\tis = "++show is) $ return ()
+                      () <- trace ("\tvs = "++show vs) $ return ()
+                      () <- trace ("\ttyf = "++show tyf) $ return ()
+                      return $ bind (union is vs) tyf
      let tycast = foldl TApp (TCon r) (map eitherVar is) `TArr`
                   foldl TApp (TFix (Var t)) (map eitherVar is)
      let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
@@ -410,7 +429,18 @@ ti n kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> freshTyName "_" Star
      ty2 <- ti n kctx ictx ((x, monoTy ty1) : ctx) env t
+     -- () <- trace ("\n\tkctx' = "++show kctx) $ return ()
+     -- () <- trace ("\n\tictx' = "++show ictx) $ return ()
+     ps <- get 
+     () <- trace ("\n\tps = "++show ps) $ return ()
      lift2 . unify Star =<< ki n kctx ictx env ty2
+             `catchErrorThrowWithMsg`
+                (++ "\n\t" ++ "when checking kind of " ++ show ty2
+                 ++ "\n" ++ "kctx = " ++ show kctx
+                 ++ "\n" ++ "ictx = " ++ show ictx
+                 ++ "\n" ++ "ctx = " ++ show ((x, monoTy ty1) : ctx)
+                 ++ "\n" ++ "env = " ++ show env
+                )
      return (TArr ty1 ty2)
 ti n kctx ictx ctx env (App t1 t2) =
   do ty1 <- ti n kctx ictx ctx env t1
@@ -463,10 +493,9 @@ tiAlts n kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
 
 freshenPhi kctx ictx phi =
   do ((xs,ys),phi') <- unbind (bind (fvTmPhi,fvTyPhi) phi)
-     psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | x<-ys]
-     psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | x<-xs]
-     ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
-     lift $ modify ((ps++psL++psR)++)
+     psR <- sequence $ [(,) x <$> (Var <$> fresh "k_frPhiR_") | x<-ys]
+     psL <- sequence $ [(,) x <$> (Var <$> freshTyName' "t_frPhiL_") | x<-xs]
+     lift $ modify ((psL++psR)++)
      return phi'
   where
   (is,ty) = unsafeUnbind phi
@@ -499,10 +528,9 @@ tiAlt n kctx ictx ctx env mphi (x,b) =
         Nothing  -> return (u,[],undefined,Nothing)
         Just phi -> do
           (is, bodyTy) <- unbind phi
-          psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-is]
-          psL <- sequence $ [(,) x <$> (Var <$> fresh "_t") | Left x<-is]
-          ps <- sequence $ [(,) x <$> (Var <$> fresh "k") | (_,Var x)<-psL]
-          lift $ modify ((ps++psL++psR)++)
+          psR <- sequence $ [(,) x <$> (Var <$> fresh "k_AltR_") | Right x<-is]
+          psL <- sequence $ [(,) x <$> (Var <$> freshTyName' "_t") | Left x<-is]
+          lift $ modify ((psL++psR)++)
           t <- Var <$> freshTyName' "t"
           lift2 $ unify (foldl TApp t $ map eitherVar is) xtyRet
           u <- lift getSubst

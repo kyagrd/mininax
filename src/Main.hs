@@ -240,11 +240,18 @@ mypath2 = mygr2 "test/path.mininax"
 myenv = mygr "test/env.mininax"
 myenv2 = mygr2 "test/env.mininax"
 
-mytmp = mygr "test/tmp.mininax"
-mytmp2 = mygr2 "test/tmp.mininax"
-
 mykpoly = mygr "test/kpoly.mininax"
 mykpoly2 = mygr2 "test/kpoly.mininax"
+
+mypowl  = mygr "test/powl.mininax" 
+mypowl2 = mygr2 "test/powl.mininax" 
+
+myvapp  = mygr "test/vapp.mininax" 
+myvapp2 = mygr2 "test/vapp.mininax" 
+
+
+mytmp = mygr "test/tmp.mininax"
+mytmp2 = mygr2 "test/tmp.mininax"
 
 
 
