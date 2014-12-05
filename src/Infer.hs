@@ -357,41 +357,11 @@ ti n kctx ictx ctx env e@(In m t)
            return $ foldl TApp (TFix ty1) is
 ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
   do (f, Alt mphi as) <- unbind b
-     k <- fresh "k_MIt_"
-     r <- freshTyName "_r" (Var k)
-     t <- freshTyName' "t"
-     mphi' <- freshenMPhi kctx ictx mphi
-     (is, tyret) <- case mphi' of Nothing  -> (,) [] <$> (Var <$> freshTyName "b_" Star)
-                                  Just phi -> do unbind (substBackquote env phi)
-     let tyf  = foldl TApp (TCon r) (map eitherVar is) `TArr` tyret
-     let tytm = foldl TApp (Var t) (Right (TCon r) : map eitherVar is) `TArr` tyret
-     let kctx' = (r, monoKi $ Var k) : kctx
-     tyfsch <- case mphi' of
-                 Nothing -> return (monoTy tyf)
-                 _       ->
-                   do (vs,_) <- unsafeUnbind <$> closeTy kctx' ictx tyret
-                      psR <- sequence $ [(,) x <$> (Var <$> fresh "k") | Right x<-(is++vs)]
-                      psL <- sequence $ [(,) x <$> (Var <$> freshTyName' "t") | Left x<-(is++vs)]
-                      lift $ modify ((psL++psR)++)
-                      () <- trace ("\tis = "++show is) $ return ()
-                      () <- trace ("\tvs = "++show vs) $ return ()
-                      () <- trace ("\ttyf = "++show tyf) $ return ()
-                      return $ bind (union is vs) tyf
-     let ctx' = (f,tyfsch) : ctx
-     () <- trace ("\tkctx' = "++show kctx') $ return ()
-     () <- trace ("\tctx' = "++show ctx') $ return ()
-     tytm' <- tiAlts n kctx' ictx ctx' env (Alt mphi' as)
-     lift2 $ unify tytm tytm'
-     u <- lift getSubst
-     let ty = uapply u $
-                foldl TApp (TFix(Var t)) (map eitherVar is) `TArr` tyret
-     when (r `elem` fv ty) (throwError . strMsg $
-             "abstract type variable "++show r++" cannot escape in type "++
-             show ty ++" of "++show(MIt b) )
-     return ty
+     cast <- fresh "cast"
+     ti n kctx ictx ctx env (MPr $ bind (f,cast) (Alt mphi as))
 ti n kctx ictx ctx env (MPr b) =
   do ((f,cast), Alt mphi as) <- unbind b
-     k <- fresh "k_MPr_"
+     k <- fresh "k"
      r <- freshTyName "_r" (Var k)
      t <- freshTyName' "t"
      mphi' <- freshenMPhi kctx ictx mphi
