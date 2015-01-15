@@ -3,7 +3,7 @@ version: 0.2.0
 cabal-version: >=1.2
 build-type: Simple
 license: AllRightsReserved
-license-file: /home/kyagrd/cscs/mininax/LICENSE.md
+license-file: LICENSE.md
 copyright: BSD
 maintainer: Ki Yung Ahn
 homepage: https://github.com/kyagrd/mininax
