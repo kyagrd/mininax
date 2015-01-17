@@ -149,11 +149,11 @@ type KI = FreshMT (StateT [(TyName,Ki)]
 
 type KiSch = Bind ([TmName],[TyName],[KiName]) Ki
 
-ki :: Int -> KCtx -> Ctx -> Env -> Ty -> KI Ki
-ki n kctx ictx env (Var x)
+ki :: KCtx -> Ctx -> Env -> Ty -> KI Ki
+ki kctx ictx env (Var x)
    | head(show x) == '`' = throwError(strMsg $ show x++
                                       " backquoted variable not allowed (ki)")
-ki n kctx ictx env (Var x) =
+ki kctx ictx env (Var x) =
   case lookup x kctx of
     Just kisch -> return =<< freshKiInst kisch -- ki vars must be simple though
     Nothing -> do
@@ -161,7 +161,7 @@ ki n kctx ictx env (Var x) =
       case lookup x ps of
         Just k -> return k
         Nothing -> throwError(strMsg $ "ty var "++show x++" undefined tyvar")
-ki n kctx ictx env (TCon x) =
+ki kctx ictx env (TCon x) =
   case lookup x kctx of
     Just kisch -> return =<< freshKiInst kisch
     Nothing -> do
@@ -169,26 +169,26 @@ ki n kctx ictx env (TCon x) =
       case lookup x ps of
         Just k -> return k
         Nothing -> throwError(strMsg $ "ty con "++show x++" undefined tycon")
-ki n kctx ictx env (TArr t1 t2) =
-  do k1 <- ki n kctx ictx env t1
-     k2 <- ki n kctx ictx env t2
+ki kctx ictx env (TArr t1 t2) =
+  do k1 <- ki kctx ictx env t1
+     k2 <- ki kctx ictx env t2
      lift2 $ unify Star k1
      lift2 $ unify Star k2
      return Star
-ki n kctx ictx env (TApp t1 (Right t2)) =
-  do k1 <- ki n kctx ictx env t1
-     k2 <- ki n kctx ictx env t2
+ki kctx ictx env (TApp t1 (Right t2)) =
+  do k1 <- ki kctx ictx env t1
+     k2 <- ki kctx ictx env t2
      k <- Var <$> fresh "k_TApp1_"
      lift2 $ unify (KArr (Right k2) k) k1
      return k
-ki n kctx ictx env (TApp t1 (Left e2)) =
-  do k1 <- ki n kctx ictx env t1
-     t2 <- ti (n+1) kctx ictx [] env e2
+ki kctx ictx env (TApp t1 (Left e2)) =
+  do k1 <- ki kctx ictx env t1
+     t2 <- ti kctx ictx [] env e2
      k <- Var <$> fresh "k_TApp2_"
      lift2 $ unify (KArr (Left t2) k) k1
      return k
-ki n kctx ictx env (TFix t) =
-  do k1 <- ki n kctx ictx env t
+ki kctx ictx env (TFix t) =
+  do k1 <- ki kctx ictx env t
      k <- Var <$> fresh "k_TFix_"
      lift2 $ unify (KArr (Right k) k) k1
      return k
@@ -319,11 +319,11 @@ unfoldTApp ty           = [Right ty]
 eitherVar = either (Left . Var) (Right . Var)
 
 
-ti :: Int -> KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
-ti n kctx ictx ctx env (Var x)
+ti :: KCtx -> Ctx -> Ctx -> Env -> Tm -> TI Ty
+ti kctx ictx ctx env (Var x)
        | head(show x) == '`' = throwError(strMsg $ show x++
                                  " backquoted variable not allowed (ti)")
-ti n kctx ictx ctx env (Var x) =
+ti kctx ictx ctx env (Var x) =
   case lookup x (ctx++ictx) of
     Just tysch -> return =<< freshTyInst tysch
     Nothing -> do
@@ -331,7 +331,7 @@ ti n kctx ictx ctx env (Var x) =
       case lookup x ps of
         Just t -> return t
         Nothing -> throwError(strMsg $ show x++" undefined var")
-ti n kctx ictx ctx env (Con x) =
+ti kctx ictx ctx env (Con x) =
   case lookup x ictx of
     Just tysch -> return =<< freshTyInst tysch
     Nothing -> do
@@ -339,10 +339,10 @@ ti n kctx ictx ctx env (Con x) =
       case lookup x ps of
         Just t -> return t
         Nothing -> throwError(strMsg $ show x++" undefined con")
-ti n kctx ictx ctx env e@(In m t)
+ti kctx ictx ctx env e@(In m t)
   | m < 0     = throwError(strMsg $ show e ++ " has negative number")
   | otherwise =
-    do ty <- ti n kctx ictx ctx env t
+    do ty <- ti kctx ictx ctx env t
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of " ++ show t)
        let m_ = fromInteger m
@@ -355,11 +355,11 @@ ti n kctx ictx ctx env e@(In m t)
            ty1 <- Var <$> freshTyName' "t"
            lift2 $ unify (foldl TApp ty1 (Right (TFix ty1) : is)) ty
            return $ foldl TApp (TFix ty1) is
-ti n kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
-  do (f, Alt mphi as) <- unbind b
+ti kctx ictx ctx env (MIt b) = trace (show (MIt b) ++ " %%%%%%%%%%%%%%%% ") $
+  do (f, bb) <- unbind b
      cast <- fresh "cast"
-     ti n kctx ictx ctx env (MPr $ bind (f,cast) (Alt mphi as))
-ti n kctx ictx ctx env (MPr b) =
+     ti kctx ictx ctx env (MPr $ bind (f,cast) bb)
+ti kctx ictx ctx env (MPr b) =
   do ((f,cast), Alt mphi as) <- unbind b
      k <- fresh "k"
      r <- freshTyName "_r" (Var k)
@@ -386,7 +386,7 @@ ti n kctx ictx ctx env (MPr b) =
      let ctx' = (f,tyfsch) : (cast,bind is tycast) : ctx
      () <- trace ("\tkctx' = "++show kctx') $ return ()
      () <- trace ("\tctx' = "++show ctx') $ return ()
-     tytm' <- tiAlts n kctx' ictx ctx' env (Alt mphi' as)
+     tytm' <- tiAlts 1 kctx' ictx ctx' env (Alt mphi' as)
      lift2 $ unify tytm tytm'
      u <- lift getSubst
      let ty = uapply u $
@@ -395,15 +395,15 @@ ti n kctx ictx ctx env (MPr b) =
              "abstract type variable "++show r++" cannot escape in type "++
              show ty ++" of "++show(MPr b) )
      return ty
-ti n kctx ictx ctx env (Lam b) =
+ti kctx ictx ctx env (Lam b) =
   do (x, t) <- unbind b
      ty1 <- Var <$> freshTyName "_" Star
-     ty2 <- ti n kctx ictx ((x, monoTy ty1) : ctx) env t
+     ty2 <- ti kctx ictx ((x, monoTy ty1) : ctx) env t
      -- () <- trace ("\n\tkctx' = "++show kctx) $ return ()
      -- () <- trace ("\n\tictx' = "++show ictx) $ return ()
      ps <- get 
      () <- trace ("\n\tps = "++show ps) $ return ()
-     lift2 . unify Star =<< ki n kctx ictx env ty2
+     lift2 . unify Star =<< ki kctx ictx env ty2
              `catchErrorThrowWithMsg`
                 (++ "\n\t" ++ "when checking kind of " ++ show ty2
                  ++ "\n" ++ "kctx = " ++ show kctx
@@ -412,11 +412,11 @@ ti n kctx ictx ctx env (Lam b) =
                  ++ "\n" ++ "env = " ++ show env
                 )
      return (TArr ty1 ty2)
-ti n kctx ictx ctx env (App t1 t2) =
-  do ty1 <- ti n kctx ictx ctx env t1
+ti kctx ictx ctx env (App t1 t2) =
+  do ty1 <- ti kctx ictx ctx env t1
              `catchErrorThrowWithMsg`
                 (++ "\n\t" ++ "when checking type of " ++ show t1)
-     ty2 <- ti n kctx ictx ctx env t2
+     ty2 <- ti kctx ictx ctx env t2
              `catchErrorThrowWithMsg`
                 (++ "\n\t" ++ "when checking type of " ++ show t2
                  ++ "\n" ++ "kctx = " ++ show kctx
@@ -426,19 +426,19 @@ ti n kctx ictx ctx env (App t1 t2) =
      ty <- Var <$> freshTyName "a" Star
      lift2 $ unify (TArr ty2 ty) ty1
      return ty
-ti n kctx ictx ctx env (Let b) =
+ti kctx ictx ctx env (Let b) =
   do ((x, Embed t1), t2) <- unbind b
-     ty <- ti n kctx ictx ctx env t1
+     ty <- ti kctx ictx ctx env t1
             `catchErrorThrowWithMsg`
                (++ "\n\t" ++ "when checking type of " ++ show t1)
      u <- lift getSubst
      tysch <- closeTy kctx (ictx++ctx) (uapply u ty)
-     ti n kctx ictx ((x, tysch) : ctx) env t2
-ti n kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
-ti n kctx ictx ctx env e@(Alt Nothing as) = tiAlts n kctx ictx ctx env e
-ti n kctx ictx ctx env (Alt (Just phi) as) =
+     ti kctx ictx ((x, tysch) : ctx) env t2
+ti kctx ictx ctx env (Alt _ []) = throwError(strMsg "empty Alts")
+ti kctx ictx ctx env e@(Alt Nothing as) = tiAlts 0 kctx ictx ctx env e
+ti kctx ictx ctx env (Alt (Just phi) as) =
   do phi <- freshenPhi kctx ictx phi
-     tiAlts n kctx ictx ctx env (Alt (Just phi) as)
+     tiAlts 0 kctx ictx ctx env (Alt (Just phi) as)
 
 
 tiAlts n kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
@@ -451,7 +451,7 @@ tiAlts n kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
      let (Right tcon : args) =
             tApp2list $ case (head tys) of TArr t _ -> uapply u t
      (is, rngty) <- unbind (substBackquote env phi)
-     when (1 + length is > length args)
+     when (n + length is > length args)
         $ throwError(strMsg $ "too many indices in "++show phi)
      let args' = replaceSuffix args (map eitherVar is)
      let domty = foldl TApp tcon args'
@@ -548,11 +548,11 @@ tiAlt n kctx ictx ctx env mphi (x,b) =
      (ns,t) <- unbind b
      let ctx' = trace (show ns ++", "++ show xtyArgs') $ zip ns (map monoTy xtyArgs') ++ ctx
      () <- trace "zzaaa" $ return ()
-     domty <- ti n kctx' ictx' ctx' env (foldl1 App (Con x : map Var ns))
+     domty <- ti kctx' ictx' ctx' env (foldl1 App (Con x : map Var ns))
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of "
                   ++ show (foldl1 App (Con x : map Var ns)))
-     rngty <- ti n kctx' ictx' ctx' env t
+     rngty <- ti kctx' ictx' ctx' env t
               `catchErrorThrowWithMsg`
                  (++ "\n\t" ++ "when checking type of " ++ show t)
      () <- trace ("zzaaa2\t"++show xtyRet++" =?= "++show domty) $ return ()
@@ -627,9 +627,9 @@ runTI = runTIwith nullState []
 runTIwith stUS st = runUSwith stUS . runErrorT . flip evalStateT st . runFreshMT
 
 
-ti' ctx = runTI . ti 0 [] [] [] ctx
+ti' ctx = runTI . ti [] [] [] ctx
 
-ty = runTI $ ti 0 [] [] [] [] (lam "x" (Var "x"))
+ty = runTI $ ti [] [] [] [] (lam "x" (Var "x"))
 
 
 unbindSch sch = snd (unsafeUnbind sch)

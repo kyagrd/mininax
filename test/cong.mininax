@@ -1,0 +1,25 @@
+-- vim: sw=2: ts=2: expandtab: syntax=haskell:
+data EQ : * -> * -> * where
+ { Refl : EQ a a
+ } ;
+
+data EQ' : {a} -> {b} -> * where
+ { Refl' : EQ' {x} {x}
+ } ;
+
+data Bool = True | False ;
+data Unit = U ;
+
+
+symm = { a b . EQ b a } { Refl -> Refl } ;
+
+-- TODO TODO TODO
+-- TODO this should not type check !!!!!!!!!!!!!!!
+badd = { a a . EQ a b } { Refl -> Refl } ;
+
+-- trans = { a b . EQ b c -> EQ a c }
+--         { Refl -> { a c . EQ a c }
+--                   { Refl -> Refl }
+--         } ;
+
+-- cong

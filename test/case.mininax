@@ -1,0 +1,9 @@
+-- vim: sw=2: ts=2: expandtab: syntax=haskell:
+
+data Bool = False | True ;
+data BOOL : {Bool} -> * where
+ { FALSE : BOOL {False}
+ ; TRUE : BOOL {True}
+ } ;
+
+idBOOL = { {x} . BOOL {x} } { FALSE -> FALSE ; TRUE -> TRUE }

@@ -70,7 +70,7 @@ tiDec (Def (LIdent x) t) (kctx,ictx,env)
                                       " backquoted variable not allowed")
 tiDec (Def (LIdent x) t) (kctx,ictx,env) = trace ("\nDef "++ show x++" *****") $
   do let tm = term2Tm' env t
-     ty <- ti 0 kctx ictx [] env tm
+     ty <- ti kctx ictx [] env tm
            `catchErrorThrowWithMsg`
               (++ "\n\t" ++ "when checking defintion of " ++ x)
      u <- lift getSubst
@@ -159,7 +159,7 @@ tiDec (Gadt (UIdent tc) as k gAlts) (kctx,ictx,env) =
 
 kiDAlt :: KCtx -> Ctx -> Env -> DataAlt -> KI ()
 kiDAlt kctx ictx env (DAlt _ ts) =
-  do ks <- mapM (ki 0 kctx ictx env) (map (type2Ty' env) ts)
+  do ks <- mapM (ki kctx ictx env) (map (type2Ty' env) ts)
      lift2 $ unifyMany (zip (repeat Star) ks)
   where
 
@@ -187,11 +187,11 @@ kiGAlt (tc,kisch) as kctx ictx env (GAlt (UIdent c) t) =
      ictx' <- (++ ictx) <$> sequence [(,) x <$> freshTy | x <- fvTm']
      () <- trace ("kctx' = "++show kctx') $ return ()
      () <- trace ("ictx' = "++show ictx') $ return ()
-     k <- ki 0 ((tc,kisch):kctx') ictx' env resTy'
+     k <- ki ((tc,kisch):kctx') ictx' env resTy'
           `catchErrorThrowWithMsg`
              (++ "\n\t" ++ "when checking kind of resTy' " ++ show resTy')
      () <- trace ("wwwwww222") $ return ()
-     ks <- mapM (ki 0 kctx' ictx' env) ts'
+     ks <- mapM (ki kctx' ictx' env) ts'
      () <- trace ("wwwwww333") $ return ()
      lift2 $ unifyMany (zip (repeat Star) (k:ks))
      u <- lift getSubst
