@@ -31,8 +31,8 @@ import Unbound.LocallyNameless hiding (subst, Con, union)
 import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
--- import Debug.Trace
-trace _ a = a
+import Debug.Trace
+-- trace _ a = a
 
 catchErrorThrowWithMsg m f = m `catchError` (\e -> throwError . strMsg $ f e)
 
@@ -442,11 +442,11 @@ ti kctx ictx ctx env (Alt (Just phi) as) =
 
 
 tiAlts n kctx ictx ctx env (Alt Nothing as) =  -- TODO coverage of all ctors
-  do tys <- mapM (tiAlt n kctx ictx ctx env Nothing) as
+  do tys <- mapM (tiAlt kctx ictx ctx env Nothing) as
      lift2 $ unifyMany (zip tys (tail tys))
      return (head tys)
 tiAlts n kctx ictx ctx env (Alt (Just phi) as) =  -- TODO coverage of all ctors
-  do tys <- mapM (tiAlt n kctx ictx ctx env (Just phi)) as
+  do tys <- mapM (tiAlt kctx ictx ctx env (Just phi)) as
      u <- lift getSubst
      let (Right tcon : args) =
             tApp2list $ case (head tys) of TArr t _ -> uapply u t
@@ -486,7 +486,7 @@ app2list (App t1 t2) = app2list t1 ++ [t2]
 app2list t           = [t]
 
 
-tiAlt n kctx ictx ctx env mphi (x,b) =
+tiAlt kctx ictx ctx env mphi (x,b) =
   do xTy <- case lookup x ictx of
                  Nothing -> throwError . strMsg $ show x ++ " undefined"
                  Just xt -> freshTyInst xt

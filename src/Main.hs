@@ -253,6 +253,10 @@ myvapp2 = mygr2 "test/vapp.mininax"
 mytmp = mygr "test/tmp.mininax"
 mytmp2 = mygr2 "test/tmp.mininax"
 
+mycong = mygr "test/cong.mininax"
+mycong2 = mygr2 "test/cong.mininax"
+
+
 
 
 

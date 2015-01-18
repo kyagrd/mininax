@@ -13,9 +13,15 @@ data Unit = U ;
 
 symm = { a b . EQ b a } { Refl -> Refl } ;
 
+rrr = Refl ;
 -- TODO TODO TODO
--- TODO this should not type check !!!!!!!!!!!!!!!
+-- TODO this should not type check !!!!!!!!!!!!!!! cannot use the same var name again
 badd = { a a . EQ a b } { Refl -> Refl } ;
+
+
+-- TODO TODO TODO
+-- TODO this really really should not type check !!!!!!!!!!!!!!!
+bad = { a b . EQ b c } { Refl -> Refl } ;
 
 -- trans = { a b . EQ b c -> EQ a c }
 --         { Refl -> { a c . EQ a c }
