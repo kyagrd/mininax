@@ -31,8 +31,8 @@ import Unbound.LocallyNameless hiding (subst, Con, union)
 import qualified Unbound.LocallyNameless as LN
 import Unbound.LocallyNameless.Ops (unsafeUnbind)
 import GHC.Exts( IsString(..) )
-import Debug.Trace
--- trace _ a = a
+-- import Debug.Trace
+trace _ a = a
 
 catchErrorThrowWithMsg m f = m `catchError` (\e -> throwError . strMsg $ f e)
 
