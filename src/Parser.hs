@@ -37,6 +37,11 @@ trace _ a = a
 
 -- antiquote "[" ":" ":]" ;
 bnfc [lbnf|
+token CommentHeader      ( '-' '-' ) ;
+comment "--" ; 
+token BlockCommentOpen   ( '{' '-' ) ;
+token BlockCommentClose  ( '-' '}' ) ;
+comment "{-" "-}" ;
 
 token LIdent ( ('`' | lower | '_') (letter | digit | '_' | '\'')* ) ;
 token UIdent (upper (letter | digit | '_' | '\'')* ) ;
@@ -102,9 +107,6 @@ separator GadtAlt ";";
 
 DAlt. DataAlt ::= UIdent [Type3] ;
 separator DataAlt "|";
-
-comment "{-" "-}" ;
-comment "--" ; 
      |]
 -- entrypoints Prog, Dec, Kind, Type, Term ;
 
