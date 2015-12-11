@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="Mininax : Prototype implementation of the Nax language">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Mininax</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/kyagrd/mininax">View on GitHub</a>
+
+          <h1 id="project_title">Mininax</h1>
+          <h2 id="project_tagline">Prototype implementation of the Nax language</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/kyagrd/mininax/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/kyagrd/mininax/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <p>Mininax is a prototype reference implementation of the Nax programming language,
+which is described in <a href="https://dl.dropboxusercontent.com/u/2589099/thesis/Nax_KiYungAhn_thesis_draft.pdf">my Ph.D. dissertation draft</a>,
+but only implements the core part of the language without syntactic sugars
+(e.g., type synonyms, fixpoint derivation). There are few other differences
+in the syntax compared to the version of the language in my dissertation.
+Mininax supports case function syntax rather than case expression syntax.
+A case function is a list of case alternatives that awaits an argument
+to scrutinize. For example, <code>{ False -&gt; e1; True -&gt; e2 }</code> is a case function,
+which means <code>\ x -&gt; case x of { False -&gt; e1; True -&gt; e2 }</code> if you had case expressions. 
+In addition, mininax has better GADT declaration syntax than the language syntax
+described in my Ph.D. dissertation.</p>
+
+<p>Here is an example mininax code.</p>
+
+<div class="highlight highlight-source-haskell"><pre><span class="pl-k">data</span> <span class="pl-c1">Unit</span> <span class="pl-k">=</span> <span class="pl-c1">Unit</span> ;                                                              
+<span class="pl-k">data</span> <span class="pl-c1">Bool</span> <span class="pl-k">=</span> <span class="pl-c1">False</span> <span class="pl-k">|</span> <span class="pl-c1">True</span> ;                                                      
+<span class="pl-k">data</span> <span class="pl-c1">Maybe</span> a <span class="pl-k">=</span> <span class="pl-c1">Nothing</span> <span class="pl-k">|</span> <span class="pl-c1">Just</span> a ;                                               
+<span class="pl-k">data</span> <span class="pl-c1">Either</span> a b <span class="pl-k">=</span> <span class="pl-c1">Left</span> a <span class="pl-k">|</span> <span class="pl-c1">Right</span> b ;                                            
+<span class="pl-k">data</span> <span class="pl-c1">Pair</span> a b <span class="pl-k">=</span> <span class="pl-c1">Pair</span> a b ;                                                      
+
+<span class="pl-c1">id</span> <span class="pl-k">=</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> x ;                                                                  
+<span class="pl-c1">flip</span> <span class="pl-k">=</span> <span class="pl-k">\</span>f <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>y <span class="pl-k">-&gt;</span> f y x ;                                                
+x <span class="pl-k">=</span> <span class="pl-c1">id</span>;                                                                         
+z <span class="pl-k">=</span> {<span class="pl-c1">True</span> <span class="pl-k">-&gt;</span> <span class="pl-c1">True</span>; <span class="pl-c1">False</span> <span class="pl-k">-&gt;</span> <span class="pl-c1">False</span>};                                             
+z2 <span class="pl-k">=</span> {<span class="pl-c1">Nothing</span> <span class="pl-k">-&gt;</span> <span class="pl-c1">False</span>; <span class="pl-c1">Just</span> x <span class="pl-k">-&gt;</span> <span class="pl-c1">True</span>};                                        
+b <span class="pl-k">=</span> <span class="pl-c1">True</span>;                                                                       
+c <span class="pl-k">=</span> x b;                                                                        
+p <span class="pl-k">=</span> <span class="pl-c1">Pair</span> ;                                                                      
+z3 <span class="pl-k">=</span> <span class="pl-c1">Pair</span> <span class="pl-c1">True</span> <span class="pl-c1">False</span>;                                                           
+
+<span class="pl-k">data</span> <span class="pl-c1">N</span> r <span class="pl-k">=</span> <span class="pl-c1">Z</span> <span class="pl-k">|</span> <span class="pl-c1">S</span> r ;                                                            
+<span class="pl-c">-- Use (In 0 ...) for regular recursive values without any index                </span>
+zero <span class="pl-k">=</span> <span class="pl-c1">In</span> <span class="pl-c1">0</span> <span class="pl-c1">Z</span> ;                                                                 
+<span class="pl-c1">succ</span> <span class="pl-k">=</span> <span class="pl-k">\</span>n <span class="pl-k">-&gt;</span> <span class="pl-c1">In</span> <span class="pl-c1">0</span> (<span class="pl-c1">S</span> n) ;                                                       
+
+one <span class="pl-k">=</span> <span class="pl-c1">succ</span> zero ;                                                               
+two <span class="pl-k">=</span> <span class="pl-c1">succ</span> one ;                                                                
+three <span class="pl-k">=</span> <span class="pl-c1">succ</span> two ;                                                              
+
+plus <span class="pl-k">=</span> mit add { <span class="pl-c1">Z</span>   <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>m <span class="pl-k">-&gt;</span> m                                                 
+               ; <span class="pl-c1">S</span> n <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>m <span class="pl-k">-&gt;</span> <span class="pl-c1">succ</span> (add n m) } ;                                
+mult <span class="pl-k">=</span> mit mul { <span class="pl-c1">Z</span>   <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>m <span class="pl-k">-&gt;</span> zero                                              
+               ; <span class="pl-c1">S</span> n <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>m <span class="pl-k">-&gt;</span> plus m (mul n m)                                  
+               } ;
+factorial <span class="pl-k">=</span> mpr fac cast { <span class="pl-c1">Z</span>   <span class="pl-k">-&gt;</span> one
+                         ; <span class="pl-c1">S</span> n <span class="pl-k">-&gt;</span> mult (<span class="pl-c1">succ</span> (cast n)) (fac n)
+                         } ;
+
+n4 <span class="pl-k">=</span> plus (plus one one) (plus one one) ;
+n9 <span class="pl-k">=</span> mult two three ;
+n10 <span class="pl-k">=</span> factorial zero ;
+n11 <span class="pl-k">=</span> factorial one ;
+n12 <span class="pl-k">=</span> factorial two ;
+n13 <span class="pl-k">=</span> factorial three ;
+
+<span class="pl-k">data</span> <span class="pl-c1">L</span> a r <span class="pl-k">=</span> <span class="pl-c1">N</span> <span class="pl-k">|</span> <span class="pl-c1">C</span> a r ;
+nil <span class="pl-k">=</span> <span class="pl-c1">In</span> <span class="pl-c1">0</span> <span class="pl-c1">N</span> ;
+cons <span class="pl-k">=</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>xs <span class="pl-k">-&gt;</span> <span class="pl-c1">In</span> <span class="pl-c1">0</span> (<span class="pl-c1">C</span> x xs) ;
+
+z5 <span class="pl-k">=</span> cons nil nil ;
+z6 <span class="pl-k">=</span> cons <span class="pl-c1">True</span> nil ;
+
+<span class="pl-c1">length</span> <span class="pl-k">=</span> mit len { <span class="pl-c1">N</span> <span class="pl-k">-&gt;</span> zero; <span class="pl-c1">C</span> x xs <span class="pl-k">-&gt;</span> <span class="pl-c1">succ</span> (len xs) } ;
+
+n5 <span class="pl-k">=</span> <span class="pl-c1">length</span> z6 ;
+n6 <span class="pl-k">=</span> <span class="pl-c1">length</span> z5 ;
+
+<span class="pl-c">-- term indices in ADT declaration</span>
+<span class="pl-k">data</span> <span class="pl-c1">T</span> a r {i} <span class="pl-k">=</span> <span class="pl-c1">TN</span> <span class="pl-k">|</span> <span class="pl-c1">TC</span> a (r { `<span class="pl-c1">succ</span> i });
+<span class="pl-c">-- to test (In 1 ...) works for term indices</span>
+tnil <span class="pl-k">=</span> <span class="pl-c1">In</span> <span class="pl-c1">1</span> <span class="pl-c1">TN</span> ;
+tcons <span class="pl-k">=</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>xs <span class="pl-k">-&gt;</span> <span class="pl-c1">In</span> <span class="pl-c1">1</span> (<span class="pl-c1">TC</span> x xs) ;
+
+<span class="pl-k">data</span> <span class="pl-c1">P</span> r a <span class="pl-k">=</span> <span class="pl-c1">PN</span> <span class="pl-k">|</span> <span class="pl-c1">PC</span> a (r (<span class="pl-c1">Pair</span> a a)) ;
+<span class="pl-c">-- Use (In 1 ...) for recursive values with one index</span>
+pnil <span class="pl-k">=</span> <span class="pl-c1">In</span> <span class="pl-c1">1</span> <span class="pl-c1">PN</span> ;
+pcons <span class="pl-k">=</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>xs <span class="pl-k">-&gt;</span> <span class="pl-c1">In</span> <span class="pl-c1">1</span> (<span class="pl-c1">PC</span> x xs) ;
+
+z7 <span class="pl-k">=</span> pcons <span class="pl-c1">True</span> (pcons (<span class="pl-c1">Pair</span> <span class="pl-c1">False</span> <span class="pl-c1">True</span>) pnil) ;
+z8 <span class="pl-k">=</span> pcons one (pcons (<span class="pl-c1">Pair</span> two three) pnil) ;
+kkk <span class="pl-k">=</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>y <span class="pl-k">-&gt;</span> x ;
+psum <span class="pl-k">=</span> mit <span class="pl-c1">sum</span> {{ a <span class="pl-k">.</span> (a <span class="pl-k">-&gt;</span> <span class="pl-c1">Mu</span> <span class="pl-c1">N</span>) <span class="pl-k">-&gt;</span> <span class="pl-c1">Mu</span> <span class="pl-c1">N</span> }}
+           { <span class="pl-c1">PN</span>      <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>f <span class="pl-k">-&gt;</span> zero
+           ; <span class="pl-c1">PC</span> x xs <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>f <span class="pl-k">-&gt;</span> plus (f x) 
+                                   (<span class="pl-c1">sum</span> xs {<span class="pl-c1">Pair</span> a b <span class="pl-k">-&gt;</span> plus (f a) (f b)})
+           } ;
+
+n7 <span class="pl-k">=</span> psum z8 <span class="pl-c1">id</span> ;
+n8 <span class="pl-k">=</span> <span class="pl-c1">flip</span> psum ;
+n14 <span class="pl-k">=</span> <span class="pl-c1">flip</span> psum <span class="pl-c1">id</span> z8 ;
+
+<span class="pl-k">data</span> <span class="pl-c1">V</span> a r <span class="pl-k">:</span> { <span class="pl-c1">Mu</span> <span class="pl-c1">N</span> } <span class="pl-k">-&gt;</span> <span class="pl-k">*</span> <span class="pl-k">where</span>
+  { <span class="pl-c1">VN</span> <span class="pl-k">:</span> <span class="pl-c1">V</span> a r { `zero }
+  ; <span class="pl-c1">VC</span> <span class="pl-k">:</span> a <span class="pl-k">-&gt;</span> r { n } <span class="pl-k">-&gt;</span> <span class="pl-c1">V</span> a r { `<span class="pl-c1">succ</span> n }
+  } ;
+
+vnil <span class="pl-k">=</span> <span class="pl-c1">In</span> <span class="pl-c1">1</span> <span class="pl-c1">VN</span> ;
+vcons <span class="pl-k">=</span> <span class="pl-k">\</span>x <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>xs <span class="pl-k">-&gt;</span> <span class="pl-c1">In</span> <span class="pl-c1">1</span> (<span class="pl-c1">VC</span> x xs) ;
+
+v1 <span class="pl-k">=</span> vcons one vnil ;
+v2 <span class="pl-k">=</span> vcons two v1 ;
+
+vlength <span class="pl-k">=</span> mit len {{ {n} <span class="pl-k">.</span> <span class="pl-c1">Mu</span> <span class="pl-c1">N</span> }}
+              { <span class="pl-c1">VN</span> <span class="pl-k">-&gt;</span> zero
+              ; <span class="pl-c1">VC</span> x xs <span class="pl-k">-&gt;</span> <span class="pl-c1">succ</span> (len xs)
+              } ;
+
+vmap <span class="pl-k">=</span> <span class="pl-k">\</span>f <span class="pl-k">-&gt;</span> mit <span class="pl-c1">map</span> {{ {n} <span class="pl-k">.</span> <span class="pl-c1">Mu</span> (<span class="pl-c1">V</span> b) {n} }}
+                 { <span class="pl-c1">VN</span>      <span class="pl-k">-&gt;</span> vnil
+                 ; <span class="pl-c1">VC</span> x xs <span class="pl-k">-&gt;</span> vcons (f x) (<span class="pl-c1">map</span> xs)
+                 } ;
+
+vapp <span class="pl-k">=</span> mit app {{ {n} <span class="pl-k">.</span> <span class="pl-c1">Mu</span> (<span class="pl-c1">V</span> b) {m} <span class="pl-k">-&gt;</span> <span class="pl-c1">Mu</span> (<span class="pl-c1">V</span> b) {`plus n m} }}
+            { <span class="pl-c1">VN</span>      <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>ys <span class="pl-k">-&gt;</span> ys
+            ; <span class="pl-c1">VC</span> x xs <span class="pl-k">-&gt;</span> <span class="pl-k">\</span>ys <span class="pl-k">-&gt;</span> vcons x (app xs ys)
+            } ;
+
+n15 <span class="pl-k">=</span> vlength v2 ;
+v3 <span class="pl-k">=</span> vapp v2 v1 ;
+v4 <span class="pl-k">=</span> vmap <span class="pl-c1">succ</span> v3 ;</pre></div>
+
+<p>Runining <code>mininax test.mininax</code> will give results of
+kind inference and type inference.</p>
+
+<pre><code>shell-prmompt&gt; mininax test.mininax
+Unit : *
+Bool : *
+Maybe : * -&gt; *
+Either : * -&gt; * -&gt; *
+Pair : * -&gt; * -&gt; *
+N : * -&gt; *
+L : * -&gt; * -&gt; *
+T : * -&gt; ({Mu N} -&gt; *) -&gt; {Mu N} -&gt; *
+P : (* -&gt; *) -&gt; * -&gt; *
+V : * -&gt; ({Mu N} -&gt; *) -&gt; {Mu N} -&gt; *
+
+Unit : Unit
+True : Bool
+False : Bool
+Just : a -&gt; Maybe a
+Nothing : Maybe a
+Right : b -&gt; Either a b
+Left : a -&gt; Either a b
+Pair : a -&gt; b -&gt; Pair a b
+id : _6 -&gt; _6
+flip : (_12 -&gt; _10 -&gt; a14) -&gt; _10 -&gt; _12 -&gt; a14
+x : _15 -&gt; _15
+z : Bool -&gt; Bool
+z2 : Maybe a16 -&gt; Bool
+b : Bool
+c : Bool
+p : a25 -&gt; b24 -&gt; Pair a25 b24
+z3 : Pair Bool Bool
+S : r -&gt; N r
+Z : N r
+zero : Mu N
+succ : Mu N -&gt; Mu N
+one : Mu N
+two : Mu N
+three : Mu N
+plus : Mu N -&gt; Mu N -&gt; Mu N
+mult : Mu N -&gt; Mu N -&gt; Mu N
+factorial : Mu N -&gt; Mu N
+n4 : Mu N
+n9 : Mu N
+n10 : Mu N
+n11 : Mu N
+n12 : Mu N
+n13 : Mu N
+C : a -&gt; r -&gt; L a r
+N : L a r
+nil : Mu (L a110)
+cons : _113 -&gt; Mu (L _113) -&gt; Mu (L _113)
+z5 : Mu (L (Mu (L a122)))
+z6 : Mu (L Bool)
+length : Mu (L a136) -&gt; Mu N
+n5 : Mu N
+n6 : Mu N
+TC : a -&gt; r {In 0 (S i)} -&gt; T a r {i}
+TN : T a r {i}
+tnil : Mu (T a168) {i166}
+tcons : _172 -&gt; Mu (T _172) {In 0 (S i175)} -&gt; Mu (T _172) {i175}
+PC : a -&gt; r (Pair a a) -&gt; P r a
+PN : P r a
+pnil : Mu P a187
+pcons : _192 -&gt; Mu P (Pair _192 _192) -&gt; Mu P _192
+z7 : Mu P Bool
+z8 : Mu P (Mu N)
+kkk : _224 -&gt; _226 -&gt; _224
+psum : Mu P a230 -&gt; (a230 -&gt; Mu N) -&gt; Mu N
+n7 : Mu N
+n8 : (a283 -&gt; Mu N) -&gt; Mu P a283 -&gt; Mu N
+n14 : Mu N
+VC : a301 -&gt; r300 {n302} -&gt; V a301 r300 {In 0 (S n302)}
+VN : V a r {In 0 Z}
+vnil : Mu (V a319) {In 0 Z}
+vcons : _323 -&gt; Mu (V _323) {n326} -&gt; Mu (V _323) {In 0 (S n326)}
+v1 : Mu (V (Mu N)) {In 0 (S (In 0 Z))}
+v2 : Mu (V (Mu N)) {In 0 (S (In 0 (S (In 0 Z))))}
+vlength : Mu (V a348) {n345} -&gt; Mu N
+vmap : (a383 -&gt; _403) -&gt; Mu (V a383) {n380} -&gt; Mu (V _403) {n380}
+vapp : Mu (V _448) {n422} -&gt; Mu (V _448) {m420} -&gt; Mu (V _448) {
+    mit add461 {
+      Z -&gt; \ m462 -&gt; m462 ;
+      S n463 -&gt; \ m464 -&gt; In 0 (S (add461 n463 m464)) 
+    }
+    n422 m420 
+  }
+
+n15 : Mu N
+v3 : Mu (V (Mu N)) {In 0 (S (In 0 (S (In 0 (S (In 0 Z))))))}
+v4 : Mu (V (Mu N)) {In 0 (S (In 0 (S (In 0 (S (In 0 Z))))))}
+</code></pre>
+
+<p>You can try <code>-h</code> or <code>--help</code> option for more information.</p>
+
+<pre><code>shell-prmompt&gt; mininax -h
+miniax - command line program for the mininax langauge
+
+Usage: mininax [-k|--kind] [-t|--type] [-e|--eval] [-a|--all] [FILE]
+  mininax command line program
+
+Available options:
+  -h,--help                Show this help text
+  -k,--kind                Kind Inference for type constructors
+  -t,--type                Type Inference for data constructors and definitions
+  -e,--eval                Evaluate definitions
+  -a,--all                 Kind Infer, Type Infer, and Evaluate the program
+  FILE                     File path argument
+</code></pre>
+
+<p>Using either <code>-e</code> option or <code>-a</code> option,
+you can examine values of top level definitions.</p>
+
+<pre><code>shell-prmompt&gt; mininax -e test.mininax
+id = \ x -&gt; x ;
+flip = \ f -&gt; \ x -&gt; \ y -&gt; f y x ;
+x = \ x -&gt; x ;
+z = {
+  True -&gt; True ;
+  False -&gt; False 
+}
+ ;
+z2 = {
+  Nothing -&gt; False ;
+  Just x -&gt; True 
+}
+ ;
+b = True ;
+c = True ;
+p = Pair ;
+z3 = Pair True False ;
+zero = In 0 Z ;
+succ = \ n -&gt; In 0 (S n) ;
+one = In 0 (S (In 0 Z)) ;
+two = In 0 (S (In 0 (S (In 0 Z)))) ;
+three = In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))) ;
+plus = mit add {
+  Z -&gt; \ m -&gt; m ;
+  S n -&gt; \ m -&gt; succ (add n m)
+}
+ ;
+mult = mit mul {
+  Z -&gt; \ m -&gt; zero ;
+  S n -&gt; \ m -&gt; plus m (mul n m)
+}
+ ;
+factorial = mpr fac cast {
+  Z -&gt; one ;
+  S n -&gt; mult (succ (cast n)) (fac n)
+}
+ ;
+n4 = In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))))) ;
+n9 = In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))))))))) ;
+n10 = In 0 (S (In 0 Z)) ;
+n11 = In 0 (S (In 0 Z)) ;
+n12 = In 0 (S (In 0 (S (In 0 Z)))) ;
+n13 = In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))))))))) ;
+nil = In 0 N ;
+cons = \ x -&gt; \ xs -&gt; In 0 (C x xs) ;
+z5 = In 0 (C (In 0 N) (In 0 N)) ;
+z6 = In 0 (C True (In 0 N)) ;
+length = mit len {
+  N -&gt; zero ;
+  C x xs -&gt; succ (len xs)
+}
+ ;
+n5 = In 0 (S (In 0 Z)) ;
+n6 = In 0 (S (In 0 Z)) ;
+tnil = In 1 TN ;
+tcons = \ x -&gt; \ xs -&gt; In 1 (TC x xs) ;
+pnil = In 1 PN ;
+pcons = \ x -&gt; \ xs -&gt; In 1 (PC x xs) ;
+z7 = In 1 (PC True (In 1 (PC (Pair False True) (In 1 PN)))) ;
+z8 = In 1 (PC (In 0 (S (In 0 Z))) (In 1 (PC (Pair (In 0 (S (In 0 (S (In 0 Z))))) (In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))))) (In 1 PN)))) ;
+kkk = \ x -&gt; \ y -&gt; x ;
+psum = mit sum {{ a . (a -&gt; Mu N) -&gt; Mu N }} {
+  PN -&gt; \ f -&gt; zero ;
+  PC x xs -&gt; \ f -&gt; plus (f x) (sum xs {Pair a b -&gt; plus (f a) (f b)} ) 
+}
+ ;
+n7 = In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))))))))) ;
+n8 = \ x -&gt; \ y -&gt; mit sum {{ a . (a -&gt; Mu N) -&gt; Mu N }} {
+  PN -&gt; \ f -&gt; zero ;
+  PC x xs -&gt; \ f -&gt; plus (f x) (sum xs {Pair a b -&gt; plus (f a) (f b)} ) 
+}
+y x ;
+n14 = In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 (S (In 0 Z)))))))))))) ;
+vnil = In 1 VN ;
+vcons = \ x -&gt; \ xs -&gt; In 1 (VC x xs) ;
+v1 = In 1 (VC (In 0 (S (In 0 Z))) (In 1 VN)) ;
+v2 = In 1 (VC (In 0 (S (In 0 (S (In 0 Z))))) (In 1 (VC (In 0 (S (In 0 Z))) (In 1 VN)))) ;
+vlength = mit len {{ {n} . Mu N }} {
+  VN -&gt; zero ;
+  VC x xs -&gt; succ (len xs)
+}
+ ;
+vmap = \ f -&gt; mit map {{ {n} . Mu (V b) {n} }} {
+  VN -&gt; vnil ;
+  VC x xs -&gt; vcons (f x) (map xs)
+}
+ ;
+vapp = mit app {{ {n} . Mu (V b) {m} -&gt; Mu (V b) {`plus n m} }} {
+  VN -&gt; \ ys -&gt; ys ;
+  VC x xs -&gt; \ ys -&gt; vcons x (app xs ys)
+}
+ ;
+n15 = In 0 (S (In 0 (S (In 0 Z)))) ;
+v3 = In 1 (VC (In 0 (S (In 0 (S (In 0 Z))))) (In 1 (VC (In 0 (S (In 0 Z))) (In 1 (VC (In 0 (S (In 0 Z))) (In 1 VN)))))) ;
+v4 = In 1 (VC (In 0 (S (In 0 (S (In 0 (S (In 0 Z))))))) (In 1 (VC (In 0 (S (In 0 (S (In 0 Z))))) (In 1 (VC (In 0 (S (In 0 (S (In 0 Z))))) (In 1 VN)))))) ;
+</code></pre>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Mininax maintained by <a href="https://github.com/kyagrd">kyagrd</a></p>
+        <p>Published with <a href="https://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
